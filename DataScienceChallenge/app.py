@@ -369,7 +369,6 @@ with map_col:
         clicked_id = tooltip_to_id.get(current_tooltip)
         if clicked_id:
             st.session_state["picked_card_id"] = clicked_id
-            st.session_state["_scroll_to_card"] = True
             # Auto-expand: a map click should show the info immediately, in
             # one click, not require a second click on the card afterwards.
             st.session_state[f"card_{clicked_id}"] = True
@@ -377,8 +376,8 @@ with map_col:
 
 
 def render_detail(v: pd.Series, cols: int = 4) -> None:
-    """Full reasoning + raw stats for one community. Shared by the card
-    popovers and the lookup section below so both show identical detail."""
+    """Full reasoning + raw stats for one community. Shared by the points
+    list and the lookup section below so both show identical detail."""
     st.markdown(f"#### {v['community_name']}")
     st.markdown(
         f"<span style='background:{v['tier_color']}22; color:{v['tier_color']}; "
@@ -452,38 +451,14 @@ with points_col:
             f"{TIER_ICON[v['tier_id']]} **{v['community_name']}** — "
             f"{v['km_nearest_tower']:.1f} km · {v['tier_name']}"
         )
-        # on_change="rerun" + .open makes this lazy: detail only computes when
-        # the card is actually opened, instead of on every filter change.
-        pop = st.popover(
+        with st.expander(
             label,
-            use_container_width=True,
-            key=f"card_{v['community_id']}",
-            on_change="rerun",
-            type="primary" if v["community_id"] == picked_card_id else "secondary",
-        )
-        if pop.open:
-            with pop:
-                render_detail(v, cols=2)
+            expanded=v["community_id"] == picked_card_id,
+        ):
+            render_detail(v, cols=2)
 
     if len(filtered) > 150:
         st.caption(f"Showing top 150 of {len(filtered)}.")
-
-    # A map click only jumps the view to the card (see .st-key-card_<id>, the
-    # CSS class Streamlit gives a keyed widget) — it never opens it for you.
-    # JS runs inside an st.iframe, so window.parent is the actual app page,
-    # which is what needs to actually scroll.
-    if st.session_state.pop("_scroll_to_card", False) and picked_card_id:
-        st.iframe(
-            f"""
-            <script>
-            setTimeout(function() {{
-                const el = window.parent.document.querySelector('.st-key-card_{picked_card_id}');
-                if (el) {{ el.scrollIntoView({{behavior: 'smooth', block: 'center'}}); }}
-            }}, 250);
-            </script>
-            """,
-            height=1,
-        )
 
 # ---------------------------------------------------------------------------
 # Detail expander for a selected community
