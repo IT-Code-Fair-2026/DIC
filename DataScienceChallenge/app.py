@@ -411,11 +411,11 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
                 (n.strip() for n in str(village_names_raw).split(";") if n.strip()),
                 key=str.upper,
             )
-            with st.expander(f"Communities in this SA1 ({len(names)})"):
-                st.markdown(", ".join(
-                    f"**{n} (this one)**" if n.upper() == str(v["community_name"]).upper() else n
-                    for n in names
-                ))
+            st.markdown(f"**Communities in this SA1 ({len(names)})**")
+            st.caption(", ".join(
+                f"{n} (this one)" if n.upper() == str(v["community_name"]).upper() else n
+                for n in names
+            ))
     else:
         st.write("**Premises/population benefited:** no Census population record for this SA1.")
 
