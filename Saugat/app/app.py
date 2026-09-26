@@ -19,7 +19,11 @@ Expects village_gap_with_services.csv, sa1_report.csv, and
 services_sites_combined.csv in the same folder as this file.
 """
 
+import html
+import math
+
 import altair as alt
+import numpy as np
 import pandas as pd
 import streamlit as st
 import folium
@@ -97,6 +101,14 @@ st.markdown(
     .st-key-table_box [data-testid="stElementContainer"],
     .st-key-table_box [data-testid="stFullScreenFrame"],
     .st-key-table_box [data-testid="stDataFrame"] { height: 100%; }
+    .near-summary { font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
+    .near-row {
+        display: flex; justify-content: space-between; gap: 12px;
+        padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .near-name { font-size: 0.85rem; color: #EDEDED; }
+    .near-detail { font-size: 0.75rem; color: rgba(255,255,255,0.55); }
+    .near-km { font-size: 0.85rem; color: #EDEDED; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .sheet-title {
         font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.50);
         margin: 4px 0 6px 0;
@@ -260,6 +272,11 @@ def load_services(path: str = "services_sites_combined.csv") -> pd.DataFrame:
     return df.dropna(subset=["latitude", "longitude"])
 
 
+@st.cache_data
+def load_towers(path: str = "towers.csv") -> pd.DataFrame:
+    return pd.read_csv(path).dropna(subset=["latitude", "longitude"])
+
+
 def classify(row: pd.Series) -> tuple[str, str]:
     """Unchanged from the original app — tower-based tier, GAP_KM/BUFFER_KM
     only. The services columns added by 07_services_gap.ipynb are shown
@@ -342,6 +359,11 @@ try:
 except FileNotFoundError:
     services = None
 
+try:
+    towers = load_towers()
+except FileNotFoundError:
+    towers = None
+
 data = prepare(raw)
 if sa1_report is not None:
     data = data.merge(sa1_report, on="sa1_code", how="left")
@@ -349,6 +371,81 @@ if sa1_report is not None:
 HAS_SERVICES = all(c in data.columns for c in (
     "km_nearest_school", "km_nearest_medical", "km_nearest_emergency"
 ))
+
+# ---------------------------------------------------------------------------
+# Nearby: everything around a selected community
+# ---------------------------------------------------------------------------
+
+NEARBY_KM = 10  # same radius as the "within 10 km" counts elsewhere in the app
+NEARBY_ORDER = ["tower", "school", "medical", "emergency"]
+KIND_STYLE = {
+    "tower": {"label": "Towers", "one": "Tower", "icon": "🗼", "color": "#A78BFA"},
+    "school": {"label": "Schools", "one": "School", **{k: SERVICE_STYLE["school"][k] for k in ("icon", "color")}},
+    "medical": {"label": "Medical sites", "one": "Medical", **{k: SERVICE_STYLE["medical"][k] for k in ("icon", "color")}},
+    "emergency": {"label": "Emergency sites", "one": "Emergency", **{k: SERVICE_STYLE["emergency"][k] for k in ("icon", "color")}},
+}
+
+
+def _haversine_km(lat: float, lon: float, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+    p = math.pi / 180
+    a = np.sin((lats - lat) * p / 2) ** 2 + math.cos(lat * p) * np.cos(lats * p) * np.sin((lons - lon) * p / 2) ** 2
+    return 2 * 6371.0088 * np.arcsin(np.sqrt(a))
+
+
+@st.cache_data
+def nearby_for_id(community_id: int) -> pd.DataFrame:
+    """Every tower/school/medical/emergency site with its straight-line km from
+    one community, nearest first. Haversine, so it can differ from the notebook's
+    projected-CRS distances by a few hundred metres."""
+    row = data[data["community_id"] == community_id].iloc[0]
+    frames = []
+    if towers is not None:
+        detail = towers["carriers"].str.replace(";", ", ") + " · " + towers["n_transmitters"].astype(str) + " transmitters"
+        detail = detail.where(~towers["is_planning_site"], detail + " (planned)")
+        frames.append(pd.DataFrame({"kind": "tower", "name": towers["name"], "latitude": towers["latitude"],
+                                    "longitude": towers["longitude"], "detail": detail}))
+    if services is not None:
+        for src in ("school", "medical", "emergency"):
+            sub = services[services["source"] == src]
+            frames.append(pd.DataFrame({"kind": src, "name": sub["name"], "latitude": sub["latitude"],
+                                        "longitude": sub["longitude"], "detail": sub["type"].fillna("")}))
+    if not frames:
+        return pd.DataFrame(columns=["kind", "name", "latitude", "longitude", "detail", "km"])
+    items = pd.concat(frames, ignore_index=True)
+    items["km"] = _haversine_km(float(row["latitude"]), float(row["longitude"]),
+                                items["latitude"].to_numpy(), items["longitude"].to_numpy())
+    return items.sort_values("km").reset_index(drop=True)
+
+
+def nearby_section(v: pd.Series) -> None:
+    items = nearby_for_id(int(v["community_id"]))
+    if items.empty:
+        return
+    within = items[items["km"] <= NEARBY_KM]
+    st.markdown(f"**Nearby Within {NEARBY_KM} km**")
+    summary = " · ".join(
+        f"{KIND_STYLE[k]['icon']} {int((within['kind'] == k).sum())}" for k in NEARBY_ORDER
+        if k in set(items["kind"])
+    )
+    st.markdown(f'<div class="near-summary">{summary}</div>', unsafe_allow_html=True)
+    for kind in NEARBY_ORDER:
+        of_kind = items[items["kind"] == kind]
+        if of_kind.empty:
+            continue
+        sub = within[within["kind"] == kind]
+        style = KIND_STYLE[kind]
+        with st.expander(f"{style['icon']} {style['label']} · {len(sub)}", expanded=0 < len(sub) <= 5):
+            if sub.empty:
+                nearest = of_kind.iloc[0]
+                st.caption(f"None within {NEARBY_KM} km. Nearest: {nearest['name']} · {nearest['km']:.1f} km")
+                continue
+            st.markdown("".join(
+                f'<div class="near-row"><div><div class="near-name">{html.escape(str(r["name"]))}</div>'
+                f'<div class="near-detail">{html.escape(str(r["detail"]))}</div></div>'
+                f'<span class="near-km">{r["km"]:.1f}&nbsp;km</span></div>'
+                for _, r in sub.iterrows()
+            ), unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
 # Map colour modes
@@ -661,11 +758,34 @@ with map_col:
             f'<span class="item"><span class="swatch" style="background:{s["color"]}"></span>{s["icon"]} {s["label"]}</span>'
             for s in SERVICE_STYLE.values()
         )
+    _picked_now = st.session_state.get("picked_card_id")
+    if _picked_now is not None and (data["community_id"] == _picked_now).any():
+        legend_html += "".join(
+            f'<span class="item">{KIND_STYLE[k]["icon"]} {KIND_STYLE[k]["one"]}</span>' for k in NEARBY_ORDER
+        ) + f'<span class="item">Dashed: nearest of each kind · circle: {NEARBY_KM} km</span>'
     st.markdown(f'<div class="map-legend">{legend_html}</div>', unsafe_allow_html=True)
 
+    focus_id = st.session_state.get("picked_card_id")
+    focus_rows = data[data["community_id"] == focus_id]
+    focus = focus_rows.iloc[0] if not focus_rows.empty else None
+
+    # A selected community re-centres the map on it. The zoom fits the 10 km radius,
+    # or zooms out (up to 150 km) so the nearest site of each kind is in view too.
+    focus_zoom = 5
+    if focus is not None:
+        reach = float(min(max(nearby_for_id(int(focus["community_id"])).groupby("kind")["km"].min().max(), NEARBY_KM), 150))
+        mpp = reach * 1000 * 1.15 / 270  # metres per pixel that fit `reach` in half the map height
+        focus_zoom = int(max(7, min(11, math.floor(math.log2(156543.03 * math.cos(math.radians(float(focus["latitude"]))) / mpp)))))
     m = folium.Map(
-        location=[-19.5, 133.5], zoom_start=5, tiles="OpenStreetMap", prefer_canvas=True
+        location=[float(focus["latitude"]), float(focus["longitude"])] if focus is not None else [-19.5, 133.5],
+        zoom_start=focus_zoom, tiles="OpenStreetMap", prefer_canvas=True,
     )
+    if focus is not None:
+        # Added first so the community dots stay on top and clickable.
+        folium.Circle(
+            [float(focus["latitude"]), float(focus["longitude"])], radius=NEARBY_KM * 1000,
+            color="#EDEDED", weight=1, dash_array="4 6", fill=True, fill_color="#EDEDED", fill_opacity=0.05,
+        ).add_to(m)
     m.get_root().header.add_child(folium.Element(
         "<style>.leaflet-tile-pane "
         "{ filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }</style>"
@@ -705,11 +825,38 @@ with map_col:
                     tooltip=f"{style['icon']} {s['name']}",
                 ).add_to(m)
 
+    if focus is not None:
+        clat, clon = float(focus["latitude"]), float(focus["longitude"])
+        items = nearby_for_id(int(focus["community_id"]))
+        nearest_each = items.groupby("kind").head(1)
+        shown = pd.concat([items[items["km"] <= NEARBY_KM], nearest_each]).loc[lambda d: ~d.index.duplicated()]
+        for _, it in shown.iterrows():
+            st_ = KIND_STYLE[it["kind"]]
+            folium.Marker(
+                [it["latitude"], it["longitude"]],
+                icon=folium.DivIcon(
+                    html=(f'<div style="width:24px;height:24px;border-radius:50%;background:#0A0A0A;'
+                          f'border:1.5px solid {st_["color"]};display:flex;align-items:center;'
+                          f'justify-content:center;font-size:13px;">{st_["icon"]}</div>'),
+                    icon_size=(24, 24), icon_anchor=(12, 12),
+                ),
+                tooltip=f"{st_['icon']} {it['name']} · {it['km']:.1f} km",
+            ).add_to(m)
+        # Dashed line to the nearest site of each kind, even when it is beyond 10 km.
+        for _, it in nearest_each.iterrows():
+            st_ = KIND_STYLE[it["kind"]]
+            folium.PolyLine(
+                [[clat, clon], [it["latitude"], it["longitude"]]],
+                color=st_["color"], weight=2, opacity=0.9, dash_array="6 6",
+                tooltip=f"Nearest {st_['one'].lower()} · {it['name']} · {it['km']:.1f} km",
+            ).add_to(m)
+        folium.CircleMarker([clat, clon], radius=11, color="#EDEDED", weight=2, fill=False).add_to(m)
+
     map_state = st_folium(
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
         # Key changes with the filtered set so the map redraws when filters change.
-        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{st.session_state.get('map_epoch', 0)}",
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{focus_id}_{st.session_state.get('map_epoch', 0)}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
@@ -726,8 +873,10 @@ with map_col:
             clicked_id = filtered.loc[d2.idxmin(), "community_id"]
         else:
             clicked_id = tooltip_to_id.get(current_tooltip)
-        if clicked_id:
+        st.session_state["_last_map_click"] = click_sig
+        if clicked_id and clicked_id != st.session_state.get("picked_card_id"):
             st.session_state["picked_card_id"] = clicked_id
+            st.rerun()  # rebuild the map centred on the new selection
     if click_sig:
         st.session_state["_last_map_click"] = click_sig
 
@@ -816,6 +965,8 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
             ))
     else:
         st.write("**Premises/population benefited:** no Census population record for this SA1.")
+
+    nearby_section(v)
 
     stat_cols = st.columns(cols)
     stats = build_stats(v)
@@ -919,9 +1070,10 @@ with tab_table:
         rows = event.selection.rows if event and event.selection else []
         table_pick = int(ranked.loc[rows[0], "community_id"]) if rows else None
         if table_pick != st.session_state.get("_last_table_pick"):
-            if table_pick is not None:
-                st.session_state["picked_card_id"] = table_pick
             st.session_state["_last_table_pick"] = table_pick
+            if table_pick is not None and table_pick != st.session_state.get("picked_card_id"):
+                st.session_state["picked_card_id"] = table_pick
+                st.rerun()
 
 # ---------------------------------------------------------------------------
 # Insights tab
