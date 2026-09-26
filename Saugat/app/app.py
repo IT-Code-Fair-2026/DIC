@@ -60,9 +60,9 @@ st.markdown(
     .block-container { padding-right: 372px !important; }
     /* st.dialog restyled as a right-hand drawer. The backdrop ignores pointer
        events so the map stays clickable while the drawer is open. */
-    [data-testid="stDialog"] { pointer-events: none; background: transparent !important; }
-    [data-testid="stDialog"] > div { background: transparent !important; align-items: stretch; justify-content: flex-end; }
-    [data-testid="stDialog"] [role="dialog"] {
+    [data-testid="stDialog"]:has(.st-key-close_detail) { pointer-events: none; background: transparent !important; }
+    [data-testid="stDialog"]:has(.st-key-close_detail) > div { background: transparent !important; align-items: stretch; justify-content: flex-end; }
+    [data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail) {
         pointer-events: auto; position: fixed; top: 60px; right: 0; bottom: 0; left: auto;
         width: var(--detail-w, 420px) !important; min-width: 340px; max-width: 90vw; height: auto; max-height: none;
         margin: 0; border-radius: 0; box-shadow: none;
@@ -85,9 +85,9 @@ st.markdown(
     }
     .sheet-resize-handle:hover, .sheet-resize-handle.dragging { background: rgba(91,141,239,0.55); }
     @keyframes sheet-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) { [data-testid="stDialog"] [role="dialog"] { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { [data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail) { animation: none; } }
     @media (max-width: 1000px) {
-        [data-testid="stDialog"] [role="dialog"] { top: 0; width: 100vw !important; max-width: 100vw; }
+        [data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail) { top: 0; width: 100vw !important; max-width: 100vw; }
         .st-key-right_sheet { position: static; width: auto; border-left: 0; }
         .block-container { padding-right: 1rem !important; }
     }
@@ -117,6 +117,39 @@ st.markdown(
     }
     .stat-row .stat-total { font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 4px; }
     .st-key-right_sheet .sheet-title:not(:first-child) { margin-top: 20px; }
+    /* Flat, monochrome controls (Vercel-style): 1px borders, no shadows. */
+    .stButton > button, .stDownloadButton > button {
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px;
+        font-size: 0.85rem; font-weight: 500; min-height: 36px; box-shadow: none;
+        transition: border-color 150ms ease, background-color 150ms ease;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: #111; border-color: rgba(255,255,255,0.30); color: #EDEDED;
+    }
+    .stButton > button:focus-visible, .stDownloadButton > button:focus-visible,
+    [data-baseweb="select"] > div:focus-within, button[role="tab"]:focus-visible {
+        outline: 2px solid #5B8DEF; outline-offset: 2px;
+    }
+    [data-baseweb="select"] > div, [data-baseweb="input"] > div { border-radius: 8px; }
+    button[role="tab"] { font-weight: 500; }
+    button[role="tab"][aria-selected="true"] { color: #EDEDED; }
+    [data-baseweb="tab-highlight"] { background: #EDEDED; }
+    [data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail)) {
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; box-shadow: none;
+    }
+    .st-key-open_search { width: 100%; }
+    .st-key-open_search button, .st-key-open_search button * { text-align: left; }
+    .st-key-open_search button > div { flex: 1; justify-content: flex-start; }
+    .st-key-open_search button span { justify-content: flex-start; }
+    .st-key-open_search button {
+        width: 100%; max-width: 340px; justify-content: space-between; color: rgba(255,255,255,0.55);
+        font-weight: 400;
+    }
+    .st-key-open_search button::after {
+        content: "Ctrl K"; white-space: nowrap; font-size: 0.72rem; color: rgba(255,255,255,0.50);
+        border: 1px solid rgba(255,255,255,0.16); border-radius: 5px; padding: 1px 6px;
+    }
+    html[data-mac="1"] .st-key-open_search button::after { content: "⌘K"; }
     .result-count {
         text-align: right; font-size: 0.85rem; font-weight: 400;
         color: rgba(255,255,255,0.50); font-variant-numeric: tabular-nums;
@@ -139,8 +172,8 @@ st.markdown(
     .map-legend .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
     .info-card {
-        background: #161A21; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 10px; padding: 14px 16px; font-size: 0.82rem;
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 8px; padding: 14px 16px; font-size: 0.82rem;
         color: rgba(255,255,255,0.75); line-height: 1.5;
     }
     .info-card .info-card-title { font-weight: 700; color: #E6E8EB; margin-bottom: 8px; font-size: 0.85rem; }
@@ -151,8 +184,8 @@ st.markdown(
     .info-card code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
 
     .footnote {
-        background: #161A21; border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 10px; padding: 10px 16px; font-size: 0.78rem;
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 8px; padding: 10px 16px; font-size: 0.78rem;
         color: rgba(255,255,255,0.55);
     }
     </style>
@@ -557,7 +590,9 @@ if HAS_SERVICES:
         mask &= data["n_emergency_10km"] == 0
 
 filtered = data[mask].copy()
-st.markdown(
+search_col, count_col = st.columns([1, 1], vertical_alignment="center")
+open_palette = search_col.button("Search Communities…", key="open_search")
+count_col.markdown(
     f'<div class="result-count">{len(filtered):,} of {len(data):,} communities shown</div>',
     unsafe_allow_html=True,
 )
@@ -767,6 +802,8 @@ def detail_drawer(v: pd.Series) -> None:
         "Download Summary", data=community_summary(v), file_name=f"{slug}_summary.txt",
         mime="text/plain", on_click="ignore", key="dl_summary", width="content",
     )
+    if v["community_id"] not in set(filtered["community_id"]):
+        st.caption("Hidden on the map by the current filters.")
     render_detail(v, cols=2)
 
 
@@ -844,21 +881,6 @@ with tab_table:
             if table_pick is not None:
                 st.session_state["picked_card_id"] = table_pick
             st.session_state["_last_table_pick"] = table_pick
-
-    st.divider()
-    st.subheader("Look up a community")
-    names_sorted = filtered["community_name"].sort_values().tolist()
-    if names_sorted:
-        if st.session_state.get("lookup_pick") not in names_sorted:
-            st.session_state["lookup_pick"] = names_sorted[0]
-
-        pick = st.selectbox(
-            "Choose a community for its full reasoning and raw stats",
-            options=names_sorted,
-            key="lookup_pick",
-        )
-        v = filtered[filtered["community_name"] == pick].iloc[0]
-        render_detail(v, cols=4)
 
 # ---------------------------------------------------------------------------
 # Insights tab
@@ -947,9 +969,38 @@ st.markdown(
 # Detail drawer + community deep link (filters/colour sync via bind="query-params")
 # ---------------------------------------------------------------------------
 
+def _palette_label(cid: int) -> str:
+    r = palette_rows[cid]
+    aliases = str(r["community_aliases"])
+    names = [] if aliases.startswith("No aliases") or aliases == "nan" else [a.strip().title() for a in aliases.split(",") if a.strip()]
+    also = f" · also {', '.join(names[:2])}" + ("…" if len(names) > 2 else "") if names else ""
+    return f"{r['community_name']} · {r['tier_name']} · {r['community_type']}{also}"
+
+
+palette_rows = data.set_index("community_id").to_dict("index")
+
+
+@st.dialog("Search Communities", width="medium")
+def search_palette() -> None:
+    # The selectbox filters as you type (client-side), matching name, tier, type
+    # and known aliases. Picking a result closes this and opens its drawer.
+    choice = st.selectbox(
+        "Community", options=sorted(palette_rows, key=lambda c: palette_rows[c]["community_name"]),
+        index=None, format_func=_palette_label, key="palette_pick",
+        placeholder="Type a name, tier or type…", label_visibility="collapsed",
+    )
+    st.caption("Searches all 792 communities, whatever the filters are set to.")
+    if choice is not None:
+        st.session_state["picked_card_id"] = int(choice)
+        st.session_state.pop("palette_pick", None)
+        st.rerun()
+
+
 picked_card_id = st.session_state.get("picked_card_id")
 picked = data[data["community_id"] == picked_card_id]
-if not picked.empty:
+if open_palette:
+    search_palette()  # only one dialog can open per run, so it takes priority
+elif not picked.empty:
     detail_drawer(picked.iloc[0])
 
 # Drag-to-resize handle for the drawer (width is remembered in localStorage).
@@ -959,8 +1010,15 @@ st.iframe(
     const doc = window.parent.document;
     const KEY = 'detailSheetWidth';
     try { const w = localStorage.getItem(KEY); if (w) doc.documentElement.style.setProperty('--detail-w', w + 'px'); } catch (e) {}
+    function focusPalette() {
+      const pal = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail))');
+      if (!pal) return;
+      const input = pal.querySelector('input');
+      if (input && input.dataset.astraFocused !== '1') { input.dataset.astraFocused = '1'; input.focus(); }
+    }
     function attach() {
-      const dlg = doc.querySelector('[data-testid="stDialog"] [role="dialog"]');
+      focusPalette();
+      const dlg = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail)');
       if (!dlg || dlg.querySelector('.sheet-resize-handle')) return;
       const h = doc.createElement('div');
       h.className = 'sheet-resize-handle';
@@ -982,11 +1040,22 @@ st.iframe(
     // Streamlit marks the page inert while a dialog is open; lift it so the map,
     // tabs and filters stay usable next to the drawer.
     const lift = () => {
+      if (!doc.querySelector('.st-key-close_detail')) return;  // only for the drawer
       let e = doc.querySelector('[data-testid="stApp"]');
       while (e && e !== doc.body) { if (e.inert) e.inert = false; e = e.parentElement; }
     };
     new MutationObserver(lift).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['inert'] });
     lift();
+    doc.documentElement.dataset.mac = /Mac|iPhone|iPad/.test(window.parent.navigator.platform) ? '1' : '0';
+    if (!window.parent.__astraKeys) {
+      window.parent.__astraKeys = true;
+      doc.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+          const btn = doc.querySelector('.st-key-open_search button');
+          if (btn) { e.preventDefault(); btn.click(); }
+        }
+      });
+    }
     doc.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const btn = [...doc.querySelectorAll('[role="dialog"] button')].find(b => b.innerText.includes('Close'));
