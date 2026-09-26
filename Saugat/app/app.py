@@ -64,7 +64,7 @@ st.markdown(
     [data-testid="stDialog"] > div { background: transparent !important; align-items: stretch; justify-content: flex-end; }
     [data-testid="stDialog"] [role="dialog"] {
         pointer-events: auto; position: fixed; top: 60px; right: 0; bottom: 0; left: auto;
-        width: var(--detail-w, 420px) !important; max-width: 90vw; height: auto; max-height: none;
+        width: var(--detail-w, 420px) !important; min-width: 340px; max-width: 90vw; height: auto; max-height: none;
         margin: 0; border-radius: 0; box-shadow: none;
         background: #1A1D24 !important; opacity: 1; border-left: 1px solid rgba(255,255,255,0.10);
         overflow-y: auto; overscroll-behavior: contain;
@@ -73,6 +73,12 @@ st.markdown(
     [data-testid="stDialog"] [data-testid="stMetricValue"] { font-size: 1.05rem; font-weight: 500; }
     [data-testid="stDialog"] [data-testid="stMetricValue"] * { white-space: normal; overflow: visible; text-overflow: clip; }
     [data-testid="stDialog"] [data-testid="stMetricLabel"] { font-size: 0.75rem; color: rgba(255,255,255,0.55); }
+    [data-testid="stDialog"] .st-key-close_detail {
+        position: absolute; top: 1.85rem; right: 1.25rem; z-index: 6; width: auto;
+    }
+    [data-testid="stDialog"] .st-key-close_detail button {
+        min-height: 28px; padding: 2px 10px; font-size: 0.8rem;
+    }
     .sheet-resize-handle {
         position: absolute; top: 0; left: 0; bottom: 0; width: 6px; cursor: col-resize;
         z-index: 5; touch-action: none;
@@ -752,14 +758,14 @@ def close_detail_sheet() -> None:
 def detail_drawer(v: pd.Series) -> None:
     # Not dismissible: an outside click would close it, and the map has to stay
     # clickable while it is open. Close button + Esc (see script below) close it.
-    close_col, dl_col = st.columns(2)
-    if close_col.button("✕ Close", key="close_detail", width="stretch"):
+    # Close sits at the far right of the title row (positioned by CSS).
+    if st.button("✕ Close", key="close_detail", width="content"):
         close_detail_sheet()
         st.rerun()
     slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(v["community_name"])).strip("_")
-    dl_col.download_button(
+    st.download_button(
         "Download Summary", data=community_summary(v), file_name=f"{slug}_summary.txt",
-        mime="text/plain", on_click="ignore", key="dl_summary", width="stretch",
+        mime="text/plain", on_click="ignore", key="dl_summary", width="content",
     )
     render_detail(v, cols=2)
 
@@ -963,7 +969,7 @@ st.iframe(
       h.addEventListener('pointerdown', (e) => {
         e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('dragging');
         const move = (ev) => {
-          const w = Math.min(Math.max(window.parent.innerWidth - ev.clientX, 320), window.parent.innerWidth * 0.9);
+          const w = Math.min(Math.max(window.parent.innerWidth - ev.clientX, 340), window.parent.innerWidth * 0.9);
           doc.documentElement.style.setProperty('--detail-w', w + 'px');
         };
         const up = () => {
