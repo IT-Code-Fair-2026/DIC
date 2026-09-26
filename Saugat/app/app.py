@@ -171,18 +171,44 @@ st.markdown(
     .map-legend .item { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; color: rgba(255,255,255,0.68); }
     .map-legend .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
-    .info-card {
-        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 8px; padding: 14px 16px; font-size: 0.82rem;
-        color: rgba(255,255,255,0.75); line-height: 1.5;
+    /* ---- Left sidebar (Vercel-style): quiet labels, flat controls, hairline dividers ---- */
+    [data-testid="stSidebar"] { overscroll-behavior: contain; }
+    .side-title {
+        display: flex; align-items: baseline; gap: 8px;
+        font-size: 0.95rem; font-weight: 500; color: #EDEDED;
     }
-    .info-card .info-card-title { font-weight: 700; color: #E6E8EB; margin-bottom: 8px; font-size: 0.85rem; }
-    .info-card ul { margin: 0 0 10px 0; padding-left: 4px; list-style: none; }
-    .info-card li { margin-bottom: 5px; }
-    .info-card .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; }
-    .info-card p { margin: 8px 0 0 0; }
-    .info-card code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
-
+    .side-count { font-size: 0.75rem; font-weight: 400; color: rgba(255,255,255,0.50); font-variant-numeric: tabular-nums; }
+    .side-section {
+        font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.50);
+        margin: 22px 0 8px 0; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.10);
+    }
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        font-size: 0.78rem; font-weight: 500; color: rgba(255,255,255,0.65);
+    }
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); min-height: 36px;
+        transition: border-color 150ms ease;
+    }
+    [data-testid="stSidebar"] [data-baseweb="select"] > div:hover { border-color: rgba(255,255,255,0.30); }
+    [data-testid="stSidebar"] [data-baseweb="tag"] {
+        background: rgba(255,255,255,0.10) !important; color: #EDEDED; border-radius: 6px;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] details {
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary { font-size: 0.85rem; font-weight: 500; }
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label,
+    [data-testid="stSidebar"] [data-testid="stToggle"] label { min-height: 28px; font-size: 0.85rem; }
+    [data-testid="stSidebar"] .stButton > button { min-height: 32px; font-size: 0.8rem; }
+    [data-testid="stSidebar"] .stButton > button:disabled { opacity: 0.45; }
+    .tier-def {
+        display: flex; gap: 10px; align-items: flex-start;
+        padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .tier-def .stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; background: var(--tier-color, #888); }
+    .tier-def-name { font-size: 0.85rem; font-weight: 500; color: #EDEDED; }
+    .tier-def-text { font-size: 0.78rem; color: rgba(255,255,255,0.55); line-height: 1.45; }
+    .tier-def-text code { background: rgba(255,255,255,0.08); color: #EDEDED; padding: 1px 5px; border-radius: 4px; font-size: 0.74rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -420,20 +446,13 @@ with right_sheet:
 # Sidebar filters
 # ---------------------------------------------------------------------------
 
-GROUP_NAME = "Team ASTRA" 
+GROUP_NAME = "Team ASTRA"
 
 st.sidebar.markdown(
     f'<div class="group-name"><span class="group-label">Team</span>{GROUP_NAME}</div>',
     unsafe_allow_html=True,
 )
-st.sidebar.header("Filters")
 
-FILTER_KEYS = [
-    "tier_filter", "type_filter", "remote_filter", "min_tower_filter",
-    "no_rict_filter", "guide_covered_filter", "in_nbn_filter",
-    "no_school_filter", "no_medical_filter", "no_emergency_filter",
-    "show_services_filter",
-]
 FILTER_DEFAULTS = {
     "tier_filter": [], "type_filter": [], "remote_filter": [],
     "min_tower_filter": 0,
@@ -455,8 +474,88 @@ def reset_filters() -> None:
     st.session_state["map_epoch"] = st.session_state.get("map_epoch", 0) + 1
 
 
-st.sidebar.button("↺ Reset filters", width="stretch", on_click=reset_filters)
+# Header row is filled in after the widgets exist, so it can show how many
+# filters are active.
+filters_head = st.sidebar.container()
 
+tier_filter = st.sidebar.multiselect(
+    "Priority Tier",
+    options=list(TIERS.keys()),
+    default=[],
+    placeholder="All",
+    format_func=lambda t: TIERS[t]["name"],
+    key="tier_filter", bind="query-params",
+)
+
+type_options = sorted(data["community_type"].unique())
+type_filter = st.sidebar.multiselect(
+    "Community Type", options=type_options, default=[], placeholder="All", key="type_filter",
+    bind="query-params",
+)
+
+remote_options = sorted(data["remoteness_name"].unique())
+remote_filter = st.sidebar.multiselect(
+    "Remoteness", options=remote_options, default=[], placeholder="All", key="remote_filter",
+    bind="query-params",
+)
+
+min_tower = st.sidebar.slider(
+    "Min Distance to Tower (km)", 0, 150, 0, key="min_tower_filter",
+    bind="query-params",
+)
+
+with st.sidebar.expander("More Filters"):
+    no_rict = st.checkbox("No RICT public access", key="no_rict_filter", bind="query-params")
+    guide_covered = st.checkbox("Guide claims coverage", key="guide_covered_filter", bind="query-params")
+    in_nbn = st.checkbox("Inside NBN footprint", key="in_nbn_filter", bind="query-params")
+    no_school = st.checkbox("No school within 10 km", key="no_school_filter", bind="query-params", disabled=not HAS_SERVICES)
+    no_medical = st.checkbox("No medical facility within 10 km", key="no_medical_filter", bind="query-params", disabled=not HAS_SERVICES)
+    no_emergency = st.checkbox("No emergency facility within 10 km", key="no_emergency_filter", bind="query-params", disabled=not HAS_SERVICES)
+
+active_filters = sum([
+    bool(tier_filter), bool(type_filter), bool(remote_filter), min_tower > 0,
+    no_rict, guide_covered, in_nbn, no_school, no_medical, no_emergency,
+])
+with filters_head:
+    head_col, reset_col = st.columns([1, 1], vertical_alignment="center")
+    head_col.markdown(
+        f'<div class="side-title">Filters<span class="side-count">{active_filters} Active</span></div>',
+        unsafe_allow_html=True,
+    )
+    reset_col.button(
+        "Reset Filters", key="reset_filters", on_click=reset_filters,
+        disabled=active_filters == 0, width="stretch",
+    )
+
+st.sidebar.markdown('<div class="side-section">Display</div>', unsafe_allow_html=True)
+show_services_layer = st.sidebar.toggle(
+    "Show Service Sites on Map", value=False, key="show_services_filter",
+    bind="query-params", disabled=services is None,
+)
+
+TIER_DESC = {
+    "beyond": "&gt;&nbsp;15&nbsp;km, no guide claim (<code translate=\"no\">GAP_KM</code>)",
+    "spof": "Within 15&nbsp;km, 0 towers in 10&nbsp;km buffer (<code translate=\"no\">BUFFER_KM</code>)",
+    "single_net": "Towers nearby, 1 network",
+    "redundant": "2+ networks within 10&nbsp;km",
+}
+
+# The tier is mobile-tower only. Schools/medical/emergency distances are shown per
+# community and filterable, but don't change the tier: they come from a separate
+# notebook (07_services_gap.ipynb) added after the tower classification was locked
+# in, and mixing the two into one score would need a judgement call this app
+# doesn't make for you.
+tier_defs = "".join(
+    f'<div class="tier-def"><span class="stat-dot" style="--tier-color:{TIERS[tid]["color"]};"></span>'
+    f'<div><div class="tier-def-name">{TIERS[tid]["name"]}</div>'
+    f'<div class="tier-def-text">{TIER_DESC[tid]}</div></div></div>'
+    for tid in TIERS
+)
+st.sidebar.markdown(
+    f'<div class="side-section">How Tiers Work</div>{tier_defs}', unsafe_allow_html=True
+)
+
+st.sidebar.markdown('<div class="side-section">Share</div>', unsafe_allow_html=True)
 with st.sidebar:
     # Filters, colour mode and the selected community all live in the address bar,
     # so this copies a link that reopens the exact same view.
@@ -465,9 +564,10 @@ with st.sidebar:
         <style>
           body { margin: 0; font-family: Inter, sans-serif; }
           button { width: 100%; height: 36px; cursor: pointer; border-radius: 8px;
-                   background: transparent; color: #E6E8EB; font: 500 13px Inter, sans-serif;
-                   border: 1px solid rgba(255,255,255,0.20); }
-          button:hover { border-color: rgba(255,255,255,0.45); }
+                   background: #0A0A0A; color: #EDEDED; font: 500 13px Inter, sans-serif;
+                   border: 1px solid rgba(255,255,255,0.14);
+                   transition: border-color 150ms ease, background-color 150ms ease; }
+          button:hover { border-color: rgba(255,255,255,0.30); background: #111; }
           button:focus-visible { outline: 2px solid #5B8DEF; outline-offset: 2px; }
         </style>
         <button id="copy" type="button">Copy Link to This View</button>
@@ -486,75 +586,6 @@ with st.sidebar:
         """,
         height=44,
     )
-
-tier_filter = st.sidebar.multiselect(
-    "Priority tier",
-    options=list(TIERS.keys()),
-    default=[],
-    placeholder="All",
-    format_func=lambda t: TIERS[t]["name"],
-    key="tier_filter", bind="query-params",
-)
-
-type_options = sorted(data["community_type"].unique())
-type_filter = st.sidebar.multiselect(
-    "Community type", options=type_options, default=[], placeholder="All", key="type_filter",
-    bind="query-params",
-)
-
-remote_options = sorted(data["remoteness_name"].unique())
-remote_filter = st.sidebar.multiselect(
-    "Remoteness", options=remote_options, default=[], placeholder="All", key="remote_filter",
-    bind="query-params",
-)
-
-min_tower = st.sidebar.slider(
-    "Nearest tower, at least (km)", 0, 150, 0, key="min_tower_filter",
-    bind="query-params",
-)
-
-st.sidebar.caption("\"All\" means no filter. Pick options to narrow the list.")
-
-with st.sidebar.expander("More filters"):
-    no_rict = st.checkbox("No RICT public access", key="no_rict_filter", bind="query-params")
-    guide_covered = st.checkbox("Guide claims coverage", key="guide_covered_filter", bind="query-params")
-    in_nbn = st.checkbox("Inside NBN footprint", key="in_nbn_filter", bind="query-params")
-    no_school = st.checkbox("No school within 10km", key="no_school_filter", bind="query-params", disabled=not HAS_SERVICES)
-    no_medical = st.checkbox("No medical facility within 10km", key="no_medical_filter", bind="query-params", disabled=not HAS_SERVICES)
-    no_emergency = st.checkbox("No emergency facility within 10km", key="no_emergency_filter", bind="query-params", disabled=not HAS_SERVICES)
-
-show_services_layer = st.sidebar.checkbox(
-    "Show service sites on map (school/medical/emergency)",
-    value=False, key="show_services_filter", bind="query-params", disabled=services is None,
-)
-
-TIER_DESC = {
-    "beyond": "&gt;15 km, no guide claim (GAP_KM)",
-    "spof": "within 15 km, 0 towers in 10 km buffer (BUFFER_KM)",
-    "single_net": "towers nearby, 1 network",
-    "redundant": "2+ networks within 10 km",
-}
-
-st.sidebar.divider()
-tier_legend_items = "".join(
-    f'<li><span class="dot" style="background:{TIERS[tid]["color"]}"></span>'
-    f'<b>{TIERS[tid]["name"]}</b> — {TIER_DESC[tid]}</li>'
-    for tid in TIERS
-)
-# The tier is mobile-tower only. Schools/medical/emergency distances are shown per
-# community and filterable, but don't change the tier: they come from a separate
-# notebook (07_services_gap.ipynb) added after the tower classification was locked
-# in, and mixing the two into one score would need a judgement call this app
-# doesn't make for you.
-st.sidebar.markdown(
-    f"""
-    <div class="info-card">
-        <div class="info-card-title">How communities are classified</div>
-        <ul>{tier_legend_items}</ul>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
 # ---------------------------------------------------------------------------
 # Apply filters
