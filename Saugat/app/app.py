@@ -85,6 +85,10 @@ st.markdown(
         .st-key-right_sheet { position: static; width: auto; border-left: 0; }
         .block-container { padding-right: 1rem !important; }
     }
+    .st-key-table_box { flex: 0 0 520px; height: 520px; }
+    .st-key-table_box [data-testid="stElementContainer"],
+    .st-key-table_box [data-testid="stFullScreenFrame"],
+    .st-key-table_box [data-testid="stDataFrame"] { height: 100%; }
     .sheet-title {
         font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.50);
         margin: 4px 0 6px 0;
@@ -820,11 +824,14 @@ with tab_table:
                 config[label] = st.column_config.ProgressColumn(
                     label, min_value=0, max_value=float(data[col].max()), format="%.1f")
 
-        event = st.dataframe(
-            view, hide_index=True, height=520, width="stretch",
-            column_config=config, on_select="rerun", selection_mode="single-row",
-            key=f"community_table_{st.session_state.get('map_epoch', 0)}",
-        )
+        # Fixed-height box + a stretching table: 520 px normally, and the table
+        # fills the screen in fullscreen (a fixed table height would stay at 520).
+        with st.container(key="table_box"):
+            event = st.dataframe(
+                view, hide_index=True, height="stretch", width="stretch",
+                column_config=config, on_select="rerun", selection_mode="single-row",
+                key=f"community_table_{st.session_state.get('map_epoch', 0)}",
+            )
         rows = event.selection.rows if event and event.selection else []
         table_pick = int(ranked.loc[rows[0], "community_id"]) if rows else None
         if table_pick != st.session_state.get("_last_table_pick"):
