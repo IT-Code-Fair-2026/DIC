@@ -38,9 +38,10 @@ st.markdown(
     [data-testid="stHeader"] {
         background: #0E1117; border-bottom: 1px solid rgba(255,255,255,0.08);
     }
+    [data-testid="stApp"]:has([data-testid="stSidebar"][aria-expanded="false"]) [data-testid="stHeader"]::before { left: 4rem; }
     [data-testid="stHeader"]::before {
         content: "NT Deadzone Explorer   ·   Remote Connectivity | CDU IT Code Fair, Data Innovation Challenge 2026";
-        position: absolute; left: 5rem; top: 50%; transform: translateY(-50%);
+        position: absolute; left: 2rem; top: 50%; transform: translateY(-50%);
         max-width: calc(100% - 12rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         font-size: 0.95rem; font-weight: 500; letter-spacing: 0.02em;
         color: #E6E8EB; pointer-events: none;
@@ -57,7 +58,7 @@ st.markdown(
         background: #1A1D24; border-left: 1px solid rgba(255,255,255,0.10);
         padding: 1.25rem 1.25rem 2rem 1.25rem; overflow-y: auto; overscroll-behavior: contain;
     }
-    .block-container { padding-right: 372px !important; }
+    .block-container { padding-left: 2rem !important; padding-right: 372px !important; }
     /* st.dialog restyled as a right-hand drawer. The backdrop ignores pointer
        events so the map stays clickable while the drawer is open. */
     [data-testid="stDialog"]:has(.st-key-close_detail) { pointer-events: none; background: transparent !important; }
@@ -89,7 +90,7 @@ st.markdown(
     @media (max-width: 1000px) {
         [data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail) { top: 0; width: 100vw !important; max-width: 100vw; }
         .st-key-right_sheet { position: static; width: auto; border-left: 0; }
-        .block-container { padding-right: 1rem !important; }
+        .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
     }
     .st-key-table_box { flex: 0 0 520px; height: 520px; }
     .st-key-table_box [data-testid="stElementContainer"],
@@ -176,6 +177,7 @@ st.markdown(
     .side-title {
         display: flex; align-items: baseline; gap: 8px;
         font-size: 0.95rem; font-weight: 500; color: #EDEDED;
+        margin-bottom: 12px;
     }
     .side-count { font-size: 0.75rem; font-weight: 400; color: rgba(255,255,255,0.50); font-variant-numeric: tabular-nums; }
     .side-section {
