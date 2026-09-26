@@ -183,11 +183,6 @@ st.markdown(
     .info-card p { margin: 8px 0 0 0; }
     .info-card code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
 
-    .footnote {
-        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 8px; padding: 10px 16px; font-size: 0.78rem;
-        color: rgba(255,255,255,0.55);
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -546,16 +541,16 @@ tier_legend_items = "".join(
     f'<b>{TIERS[tid]["name"]}</b> — {TIER_DESC[tid]}</li>'
     for tid in TIERS
 )
+# The tier is mobile-tower only. Schools/medical/emergency distances are shown per
+# community and filterable, but don't change the tier: they come from a separate
+# notebook (07_services_gap.ipynb) added after the tower classification was locked
+# in, and mixing the two into one score would need a judgement call this app
+# doesn't make for you.
 st.sidebar.markdown(
     f"""
     <div class="info-card">
         <div class="info-card-title">How communities are classified</div>
         <ul>{tier_legend_items}</ul>
-        <p>Mobile-tower tier only. <b>Schools/medical/emergency distances</b> are
-        shown per community and filterable above, but don't change the tier —
-        they come from a separate notebook (<code>07_services_gap.ipynb</code>)
-        added after the tower classification was locked in, and mixing the two
-        into one score would need a judgement call this app doesn't make for you.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -949,21 +944,16 @@ with tab_insights:
             )
             st.caption(f"Out of {len(filtered):,} communities currently shown.")
 
-st.divider()
-st.markdown(
-    """
-    <div class="footnote">
-    Triage data, not a coverage guarantee. Every km figure is straight-line,
-    not drive time. A tower licence is permission to transmit, not proof a
-    site is on air. Services distances (school/medical/emergency) are
-    haversine on WGS84, not the projected-CRS method used for towers/MBSP —
-    close enough for triage, slightly less precise. 9 of 273 schools have no
-    coordinate (4 outstation schools with a literal "tba" address, 5 more
-    unresolved) and are excluded from the school distance calc, not guessed.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# Data caveats (kept out of the UI on purpose):
+# - Triage data, not a coverage guarantee. Every km figure is straight-line, not
+#   drive time.
+# - A tower licence is permission to transmit, not proof a site is on air.
+# - Services distances (school/medical/emergency) are haversine on WGS84, not the
+#   projected-CRS method used for towers/MBSP: close enough for triage, slightly
+#   less precise.
+# - 9 of 273 schools have no coordinate (4 outstation schools with a literal
+#   "tba" address, 5 more unresolved) and are excluded from the school distance
+#   calc, not guessed.
 
 # ---------------------------------------------------------------------------
 # Detail drawer + community deep link (filters/colour sync via bind="query-params")
