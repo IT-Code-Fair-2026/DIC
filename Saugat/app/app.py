@@ -29,12 +29,13 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="NT Deadzone Explorer — Services", layout="wide", page_icon="📡")
+st.set_page_config(page_title="NT Deadzone Explorer — Services", layout="wide", page_icon=":material/cell_tower:")
 
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .block-container { padding-top: 3.75rem; padding-bottom: 1.5rem; }
 
@@ -101,7 +102,14 @@ st.markdown(
     .st-key-table_box [data-testid="stElementContainer"],
     .st-key-table_box [data-testid="stFullScreenFrame"],
     .st-key-table_box [data-testid="stDataFrame"] { height: 100%; }
-    .near-summary { font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
+    .mi {
+        font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal;
+        font-size: 1.05em; line-height: 1; vertical-align: -0.18em; letter-spacing: normal;
+        text-transform: none; white-space: nowrap; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
+    }
+    .near-summary { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
+    .near-summary .n { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+    .near-summary_ { font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
     .near-row {
         display: flex; justify-content: space-between; gap: 12px;
         padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
@@ -316,13 +324,18 @@ TIERS = {
     "single_net": {"name": "Single network only",      "color": "#D9A441", "rank": 2},
     "redundant":  {"name": "Multiple networks",        "color": "#4A90C4", "rank": 3},
 }
-TIER_ICON = {"beyond": "🔴", "spof": "🟠", "single_net": "🟡", "redundant": "🔵"}
 
 SERVICE_STYLE = {
-    "school":    {"label": "School",    "color": "#59A14F", "icon": "🎓"},
-    "medical":   {"label": "Medical",   "color": "#E45756", "icon": "🩺"},
-    "emergency": {"label": "Emergency", "color": "#4C78A8", "icon": "🚨"},
+    "school":    {"label": "School",    "color": "#59A14F", "icon": "school"},
+    "medical":   {"label": "Medical",   "color": "#E45756", "icon": "stethoscope"},
+    "emergency": {"label": "Emergency", "color": "#4C78A8", "icon": "emergency"},
 }
+
+
+def mi(name: str, color: str | None = None) -> str:
+    """Inline Material Symbols icon for HTML snippets."""
+    style = f' style="color:{color};"' if color else ""
+    return f'<span class="mi" aria-hidden="true"{style}>{name}</span>'
 
 
 @st.cache_data
@@ -379,7 +392,7 @@ HAS_SERVICES = all(c in data.columns for c in (
 NEARBY_KM = 10  # same radius as the "within 10 km" counts elsewhere in the app
 NEARBY_ORDER = ["tower", "school", "medical", "emergency"]
 KIND_STYLE = {
-    "tower": {"label": "Towers", "one": "Tower", "icon": "🗼", "color": "#A78BFA"},
+    "tower": {"label": "Towers", "one": "Tower", "icon": "cell_tower", "color": "#A78BFA"},
     "school": {"label": "Schools", "one": "School", **{k: SERVICE_STYLE["school"][k] for k in ("icon", "color")}},
     "medical": {"label": "Medical sites", "one": "Medical", **{k: SERVICE_STYLE["medical"][k] for k in ("icon", "color")}},
     "emergency": {"label": "Emergency sites", "one": "Emergency", **{k: SERVICE_STYLE["emergency"][k] for k in ("icon", "color")}},
@@ -417,15 +430,28 @@ def nearby_for_id(community_id: int) -> pd.DataFrame:
     return items.sort_values("km").reset_index(drop=True)
 
 
+NEAREST_WHEN_EMPTY = 3  # how many of the closest sites to list when none are inside the radius
+
+
+def _near_rows(rows: pd.DataFrame) -> str:
+    return "".join(
+        f'<div class="near-row"><div><div class="near-name">{html.escape(str(r["name"]))}</div>'
+        f'<div class="near-detail">{html.escape(str(r["detail"]))}</div></div>'
+        f'<span class="near-km">{r["km"]:.1f}&nbsp;km</span></div>'
+        for _, r in rows.iterrows()
+    )
+
+
 def nearby_section(v: pd.Series) -> None:
     items = nearby_for_id(int(v["community_id"]))
     if items.empty:
         return
     within = items[items["km"] <= NEARBY_KM]
     st.markdown(f"**Nearby Within {NEARBY_KM} km**")
-    summary = " · ".join(
-        f"{KIND_STYLE[k]['icon']} {int((within['kind'] == k).sum())}" for k in NEARBY_ORDER
-        if k in set(items["kind"])
+    summary = "".join(
+        f'<span class="n" title="{KIND_STYLE[k]["label"]}">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])}'
+        f'{int((within["kind"] == k).sum())} {KIND_STYLE[k]["label"]}</span>'
+        for k in NEARBY_ORDER if k in set(items["kind"])
     )
     st.markdown(f'<div class="near-summary">{summary}</div>', unsafe_allow_html=True)
     for kind in NEARBY_ORDER:
@@ -434,17 +460,15 @@ def nearby_section(v: pd.Series) -> None:
             continue
         sub = within[within["kind"] == kind]
         style = KIND_STYLE[kind]
-        with st.expander(f"{style['icon']} {style['label']} · {len(sub)}", expanded=0 < len(sub) <= 5):
+        with st.expander(
+            f"{style['label']} · {len(sub)}", icon=f":material/{style['icon']}:",
+            expanded=len(sub) <= 5,
+        ):
             if sub.empty:
-                nearest = of_kind.iloc[0]
-                st.caption(f"None within {NEARBY_KM} km. Nearest: {nearest['name']} · {nearest['km']:.1f} km")
-                continue
-            st.markdown("".join(
-                f'<div class="near-row"><div><div class="near-name">{html.escape(str(r["name"]))}</div>'
-                f'<div class="near-detail">{html.escape(str(r["detail"]))}</div></div>'
-                f'<span class="near-km">{r["km"]:.1f}&nbsp;km</span></div>'
-                for _, r in sub.iterrows()
-            ), unsafe_allow_html=True)
+                st.caption(f"None within {NEARBY_KM} km. Closest {NEAREST_WHEN_EMPTY}:")
+                st.markdown(_near_rows(of_kind.head(NEAREST_WHEN_EMPTY)), unsafe_allow_html=True)
+            else:
+                st.markdown(_near_rows(sub), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -755,13 +779,13 @@ with map_col:
     )
     if show_services_layer and services is not None:
         legend_html += "".join(
-            f'<span class="item"><span class="swatch" style="background:{s["color"]}"></span>{s["icon"]} {s["label"]}</span>'
+            f'<span class="item">{mi(s["icon"], s["color"])} {s["label"]}</span>'
             for s in SERVICE_STYLE.values()
         )
     _picked_now = st.session_state.get("picked_card_id")
     if _picked_now is not None and (data["community_id"] == _picked_now).any():
         legend_html += "".join(
-            f'<span class="item">{KIND_STYLE[k]["icon"]} {KIND_STYLE[k]["one"]}</span>' for k in NEARBY_ORDER
+            f'<span class="item">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])} {KIND_STYLE[k]["one"]}</span>' for k in NEARBY_ORDER
         ) + f'<span class="item">Dashed: nearest of each kind · circle: {NEARBY_KM} km</span>'
     st.markdown(f'<div class="map-legend">{legend_html}</div>', unsafe_allow_html=True)
 
@@ -786,6 +810,12 @@ with map_col:
             [float(focus["latitude"]), float(focus["longitude"])], radius=NEARBY_KM * 1000,
             color="#EDEDED", weight=1, dash_array="4 6", fill=True, fill_color="#EDEDED", fill_opacity=0.05,
         ).add_to(m)
+    m.get_root().header.add_child(folium.Element(
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block">'
+        '<style>.mi{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:15px;'
+        'line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;font-feature-settings:"liga";'
+        '-webkit-font-smoothing:antialiased}</style>'
+    ))
     m.get_root().header.add_child(folium.Element(
         "<style>.leaflet-tile-pane "
         "{ filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }</style>"
@@ -822,14 +852,18 @@ with map_col:
                     fill=True,
                     fill_color=style["color"],
                     fill_opacity=0.7,
-                    tooltip=f"{style['icon']} {s['name']}",
+                    tooltip=f"{style['label']} · {s['name']}",
                 ).add_to(m)
 
     if focus is not None:
         clat, clon = float(focus["latitude"]), float(focus["longitude"])
         items = nearby_for_id(int(focus["community_id"]))
         nearest_each = items.groupby("kind").head(1)
-        shown = pd.concat([items[items["km"] <= NEARBY_KM], nearest_each]).loc[lambda d: ~d.index.duplicated()]
+        within_map = items[items["km"] <= NEARBY_KM]
+        # A kind with nothing inside the radius still shows its closest few sites.
+        empty_kinds = [k for k in NEARBY_ORDER if k in set(items["kind"]) and k not in set(within_map["kind"])]
+        closest = items[items["kind"].isin(empty_kinds)].groupby("kind").head(NEAREST_WHEN_EMPTY)
+        shown = pd.concat([within_map, nearest_each, closest]).loc[lambda d: ~d.index.duplicated()]
         for _, it in shown.iterrows():
             st_ = KIND_STYLE[it["kind"]]
             folium.Marker(
@@ -837,10 +871,10 @@ with map_col:
                 icon=folium.DivIcon(
                     html=(f'<div style="width:24px;height:24px;border-radius:50%;background:#0A0A0A;'
                           f'border:1.5px solid {st_["color"]};display:flex;align-items:center;'
-                          f'justify-content:center;font-size:13px;">{st_["icon"]}</div>'),
+                          f'justify-content:center;"><span class="mi" style="color:{st_["color"]};">{st_["icon"]}</span></div>'),
                     icon_size=(24, 24), icon_anchor=(12, 12),
                 ),
-                tooltip=f"{st_['icon']} {it['name']} · {it['km']:.1f} km",
+                tooltip=f"{st_['one']} · {it['name']} · {it['km']:.1f} km",
             ).add_to(m)
         # Dashed line to the nearest site of each kind, even when it is beyond 10 km.
         for _, it in nearest_each.iterrows():
