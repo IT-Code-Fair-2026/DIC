@@ -190,8 +190,13 @@ st.markdown(
         transition: border-color 150ms ease;
     }
     [data-testid="stSidebar"] [data-baseweb="select"] > div:hover { border-color: rgba(255,255,255,0.30); }
-    [data-testid="stSidebar"] [data-baseweb="tag"] {
-        background: rgba(255,255,255,0.10) !important; color: #EDEDED; border-radius: 6px;
+    /* Selected-value chips: the accent is near-white now, so restyle them explicitly. */
+    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] > span > span {
+        background: rgba(255,255,255,0.10) !important; border-radius: 6px;
+    }
+    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] > span > span,
+    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] > span > span * {
+        color: #EDEDED !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] details {
         background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px;
@@ -516,16 +521,53 @@ active_filters = sum([
     bool(tier_filter), bool(type_filter), bool(remote_filter), min_tower > 0,
     no_rict, guide_covered, in_nbn, no_school, no_medical, no_emergency,
 ])
+COPY_LINK_HTML = """
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+  body { margin: 0; }
+  button { width: 100%; height: 32px; cursor: pointer; border-radius: 8px;
+           display: flex; align-items: center; justify-content: center; gap: 6px;
+           background: #0A0A0A; color: #EDEDED; font: 500 12.8px Inter, sans-serif;
+           border: 1px solid rgba(255,255,255,0.14);
+           transition: border-color 150ms ease, background-color 150ms ease; }
+  button:hover { border-color: rgba(255,255,255,0.30); background: #111; }
+  button:focus-visible { outline: 2px solid #5B8DEF; outline-offset: 2px; }
+  svg { width: 14px; height: 14px; flex-shrink: 0; }
+</style>
+<button id="copy" type="button" aria-label="Copy link to this view">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+       stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+  <span id="label">Copy Link</span>
+</button>
+<script>
+  // Filters, colour mode and the selected community all live in the address bar,
+  // so this copies a link that reopens the exact same view.
+  const btn = document.getElementById('copy'), label = document.getElementById('label');
+  btn.addEventListener('click', () => {
+    const t = document.createElement('textarea');
+    t.value = window.parent.location.href;
+    document.body.appendChild(t); t.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    t.remove();
+    label.textContent = ok ? 'Copied' : 'Copy Failed';
+    setTimeout(() => { label.textContent = 'Copy Link'; }, 2000);
+  });
+</script>
+"""
+
 with filters_head:
-    head_col, reset_col = st.columns([1, 1], vertical_alignment="center")
-    head_col.markdown(
+    st.markdown(
         f'<div class="side-title">Filters<span class="side-count">{active_filters} Active</span></div>',
         unsafe_allow_html=True,
     )
+    reset_col, copy_col = st.columns(2, vertical_alignment="center")
     reset_col.button(
-        "Reset Filters", key="reset_filters", on_click=reset_filters,
+        "Reset", key="reset_filters", icon=":material/refresh:", on_click=reset_filters,
         disabled=active_filters == 0, width="stretch",
     )
+    with copy_col:
+        st.iframe(COPY_LINK_HTML, height=32)
 
 st.sidebar.markdown('<div class="side-section">Display</div>', unsafe_allow_html=True)
 show_services_layer = st.sidebar.toggle(
@@ -554,38 +596,6 @@ tier_defs = "".join(
 st.sidebar.markdown(
     f'<div class="side-section">How Tiers Work</div>{tier_defs}', unsafe_allow_html=True
 )
-
-st.sidebar.markdown('<div class="side-section">Share</div>', unsafe_allow_html=True)
-with st.sidebar:
-    # Filters, colour mode and the selected community all live in the address bar,
-    # so this copies a link that reopens the exact same view.
-    st.iframe(
-        """
-        <style>
-          body { margin: 0; font-family: Inter, sans-serif; }
-          button { width: 100%; height: 36px; cursor: pointer; border-radius: 8px;
-                   background: #0A0A0A; color: #EDEDED; font: 500 13px Inter, sans-serif;
-                   border: 1px solid rgba(255,255,255,0.14);
-                   transition: border-color 150ms ease, background-color 150ms ease; }
-          button:hover { border-color: rgba(255,255,255,0.30); background: #111; }
-          button:focus-visible { outline: 2px solid #5B8DEF; outline-offset: 2px; }
-        </style>
-        <button id="copy" type="button">Copy Link to This View</button>
-        <script>
-          const btn = document.getElementById('copy');
-          btn.addEventListener('click', () => {
-            const t = document.createElement('textarea');
-            t.value = window.parent.location.href;
-            document.body.appendChild(t); t.select();
-            let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
-            t.remove();
-            btn.textContent = ok ? 'Link Copied' : 'Copy Failed: Use the Address Bar';
-            setTimeout(() => { btn.textContent = 'Copy Link to This View'; }, 2000);
-          });
-        </script>
-        """,
-        height=44,
-    )
 
 # ---------------------------------------------------------------------------
 # Apply filters
@@ -617,7 +627,7 @@ if HAS_SERVICES:
 
 filtered = data[mask].copy()
 search_col, count_col = st.columns([1, 1], vertical_alignment="center")
-open_palette = search_col.button("Search Communities…", key="open_search")
+open_palette = search_col.button("Search Communities…", key="open_search", icon=":material/search:")
 count_col.markdown(
     f'<div class="result-count">{len(filtered):,} of {len(data):,} communities shown</div>',
     unsafe_allow_html=True,
@@ -820,12 +830,12 @@ def detail_drawer(v: pd.Series) -> None:
     # Not dismissible: an outside click would close it, and the map has to stay
     # clickable while it is open. Close button + Esc (see script below) close it.
     # Close sits at the far right of the title row (positioned by CSS).
-    if st.button("✕ Close", key="close_detail", width="content"):
+    if st.button("Close", key="close_detail", icon=":material/close:", width="content"):
         close_detail_sheet()
         st.rerun()
     slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(v["community_name"])).strip("_")
     st.download_button(
-        "Download Summary", data=community_summary(v), file_name=f"{slug}_summary.txt",
+        "Download Summary", icon=":material/download:", data=community_summary(v), file_name=f"{slug}_summary.txt",
         mime="text/plain", on_click="ignore", key="dl_summary", width="content",
     )
     if v["community_id"] not in set(filtered["community_id"]):
@@ -871,7 +881,7 @@ with tab_table:
         hint_col, dl_col = st.columns([4, 1])
         hint_col.caption("Select a row to open its details. Select a column header to sort.")
         dl_col.download_button(
-            "Download CSV", data=export.to_csv(index=False).encode("utf-8"),
+            "Download CSV", icon=":material/download:", data=export.to_csv(index=False).encode("utf-8"),
             file_name="nt_communities_filtered.csv", mime="text/csv",
             on_click="ignore", width="stretch",
         )
