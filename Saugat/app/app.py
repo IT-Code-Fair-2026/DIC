@@ -33,6 +33,18 @@ st.markdown(
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .block-container { padding-top: 2.2rem; padding-bottom: 3rem; }
 
+    /* Title inside Streamlit's top bar (next to Deploy / menu). */
+    [data-testid="stHeader"] {
+        background: #0E1117; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    [data-testid="stHeader"]::before {
+        content: "NT Deadzone Explorer   ·   Remote Connectivity — CDU IT Code Fair, Data Innovation Challenge 2026";
+        position: absolute; left: 5rem; top: 50%; transform: translateY(-50%);
+        max-width: calc(100% - 12rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        font-size: 0.95rem; font-weight: 600; letter-spacing: 0.02em;
+        color: #E6E8EB; pointer-events: none;
+    }
+
     .hero-eyebrow {
         letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.72rem;
         font-weight: 700; color: #5B8DEF; margin-bottom: 2px;
@@ -205,7 +217,6 @@ HAS_SERVICES = all(c in data.columns for c in (
 # Header
 # ---------------------------------------------------------------------------
 
-st.markdown('<div class="hero-eyebrow">📡 NT Deadzone Explorer · Services Edition</div>', unsafe_allow_html=True)
 st.markdown("## 792 communities, mobile coverage + schools/medical/emergency reach")
 st.caption(
     "Tower tiers use only GAP_KM = 15 and BUFFER_KM = 10, already defined in the "
@@ -265,34 +276,51 @@ FILTER_KEYS = [
     "no_school_filter", "no_medical_filter", "no_emergency_filter",
     "show_services_filter",
 ]
-if st.sidebar.button("↺ Reset filters", use_container_width=True):
-    for k in FILTER_KEYS:
-        st.session_state.pop(k, None)
-    st.rerun()
+FILTER_DEFAULTS = {
+    "tier_filter": [], "type_filter": [], "remote_filter": [],
+    "min_tower_filter": 0,
+    "no_rict_filter": False, "guide_covered_filter": False, "in_nbn_filter": False,
+    "no_school_filter": False, "no_medical_filter": False, "no_emergency_filter": False,
+    "show_services_filter": False,
+}
+
+
+def reset_filters() -> None:
+    # A callback runs before the widgets are rebuilt, so setting the values
+    # here reliably resets them (popping keys left sliders stale).
+    for k, default in FILTER_DEFAULTS.items():
+        st.session_state[k] = default
+    st.session_state.pop("picked_card_id", None)
+    st.session_state.pop("_last_map_click", None)
+    st.session_state.pop("lookup_pick", None)
+
+
+st.sidebar.button("↺ Reset filters", use_container_width=True, on_click=reset_filters)
 
 tier_filter = st.sidebar.multiselect(
     "Priority tier",
     options=list(TIERS.keys()),
-    default=list(TIERS.keys()),
+    default=[],
+    placeholder="All",
     format_func=lambda t: TIERS[t]["name"],
     key="tier_filter",
 )
 
 type_options = sorted(data["community_type"].unique())
 type_filter = st.sidebar.multiselect(
-    "Community type", options=type_options, default=type_options, key="type_filter"
+    "Community type", options=type_options, default=[], placeholder="All", key="type_filter"
 )
 
 remote_options = sorted(data["remoteness_name"].unique())
 remote_filter = st.sidebar.multiselect(
-    "Remoteness", options=remote_options, default=remote_options, key="remote_filter"
+    "Remoteness", options=remote_options, default=[], placeholder="All", key="remote_filter"
 )
 
 min_tower = st.sidebar.slider(
     "Nearest tower, at least (km)", 0, 150, 0, key="min_tower_filter"
 )
 
-st.sidebar.caption("Clearing a filter shows every option for that category, not zero.")
+st.sidebar.caption("\"All\" means no filter. Pick options to narrow the list.")
 
 with st.sidebar.expander("More filters"):
     no_rict = st.checkbox("No RICT public access", key="no_rict_filter")
@@ -429,7 +457,8 @@ with map_col:
     map_state = st_folium(
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
-        key="deadzone_map",
+        # Key changes with the filtered set so the map redraws when filters change.
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
