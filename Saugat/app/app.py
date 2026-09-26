@@ -153,13 +153,13 @@ st.markdown(
         background: #111; border-color: rgba(255,255,255,0.30); color: #EDEDED;
     }
     .stButton > button:focus-visible, .stDownloadButton > button:focus-visible,
-    [data-baseweb="select"] > div:focus-within, button[role="tab"]:focus-visible {
+    [data-baseweb="select"] > div:focus-within, [data-testid="stTab"]:focus-visible {
         outline: 2px solid #5B8DEF; outline-offset: 2px;
     }
     [data-baseweb="select"] > div, [data-baseweb="input"] > div { border-radius: 8px; }
-    button[role="tab"] { font-weight: 500; }
-    button[role="tab"][aria-selected="true"] { color: #EDEDED; }
-    [data-baseweb="tab-highlight"] { background: #EDEDED; }
+    [data-testid="stTab"] { font-weight: 500; }
+    [data-testid="stTab"][aria-selected="true"], [data-testid="stTab"][aria-selected="true"] * { color: #EDEDED; }
+    .react-aria-SelectionIndicator { background: #EDEDED; }
     [data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail)) {
         background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; box-shadow: none;
     }
@@ -701,6 +701,7 @@ st.sidebar.markdown(
     f'<div class="group-name"><span class="group-label">Team</span>{GROUP_NAME}</div>',
     unsafe_allow_html=True,
 )
+theme_head = st.sidebar.container()  # flags / artwork / acknowledgement, when the cultural theme is on
 
 FILTER_DEFAULTS = {
     "tier_filter": [], "type_filter": [], "remote_filter": [],
@@ -828,6 +829,72 @@ show_services_layer = st.sidebar.toggle(
     "Show Service Sites on Map", value=False, key="show_services_filter",
     bind="query-params", disabled=services is None,
 )
+cultural_theme = st.sidebar.toggle("Cultural Theme", value=True, key="cultural_theme", bind="query-params")
+
+# ---------------------------------------------------------------------------
+# Cultural theme: Aboriginal and Torres Strait Islander recognition
+# ---------------------------------------------------------------------------
+#
+# Deliberate choices (First Nations Indigenous Cultural and Intellectual Property, ICIP):
+# - Colours only, from the Aboriginal flag (black, red, yellow). No generated "Aboriginal
+#   style" art or dot patterns: traditional designs belong to specific peoples and
+#   Countries and are used only with the artist's or community's permission.
+# - Flags are shown ONLY from official artwork the team drops into assets/flags/
+#   (unaltered, not recoloured, cropped or redrawn). Nothing is drawn in code.
+# - Artwork is shown ONLY if assets/artwork/ has an image AND an attribution.txt naming the
+#   artist / community and confirming permission. See assets/README.md.
+# - Edit ACK_TEXT to name the local Traditional Custodians (e.g. Larrakia Country for Darwin).
+ASSETS_DIR = APP_DIR / "assets"
+ACK_TEXT = (
+    "We acknowledge the Traditional Custodians of the lands and waters across the Northern "
+    "Territory, and pay our respects to Elders past and present. This project uses data about "
+    "their communities, and we aim to use it with care."
+)
+FLAG_FILES = {
+    "Aboriginal flag": ("aboriginal_flag.svg", "aboriginal_flag.png"),
+    "Torres Strait Islander flag": ("torres_strait_islander_flag.svg", "torres_strait_islander_flag.png"),
+}
+
+
+def _first_existing(folder: Path, names) -> Path | None:
+    return next((folder / n for n in names if (folder / n).is_file()), None)
+
+
+if cultural_theme:
+    st.markdown(
+        """
+        <style>
+        /* Flag colours: black, red (Pantone 032), yellow (Pantone 116). Accents only. */
+        [data-testid="stHeader"]::after {
+            content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+            background: linear-gradient(90deg, #000000 0 33.3%, #EF3340 33.3% 66.6%, #FFCD00 66.6% 100%);
+        }
+        .react-aria-SelectionIndicator { background: #FFCD00 !important; }
+        [data-testid="stTab"][aria-selected="true"], [data-testid="stTab"][aria-selected="true"] * { color: #FFCD00 !important; }
+        .side-section, .sheet-title, .group-name .group-label { color: rgba(255,205,0,0.80) !important; }
+        .stButton > button:hover, .stDownloadButton > button:hover { border-color: rgba(255,205,0,0.65) !important; }
+        .stButton > button:focus-visible, .stDownloadButton > button:focus-visible,
+        [data-baseweb="select"] > div:focus-within, [data-testid="stTab"]:focus-visible { outline-color: #FFCD00 !important; }
+        .st-key-right_sheet { border-left-color: rgba(239,51,64,0.55) !important; }
+        .side-title .side-count { color: rgba(255,205,0,0.80); }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    with theme_head:
+        flag_paths = [(name, _first_existing(ASSETS_DIR / "flags", files)) for name, files in FLAG_FILES.items()]
+        flag_paths = [(n, f) for n, f in flag_paths if f is not None]
+        if flag_paths:
+            for col, (name, path) in zip(st.columns(len(flag_paths) + 1)[:-1], flag_paths):
+                col.image(str(path), caption=name, width=64)
+        art_dir = ASSETS_DIR / "artwork"
+        art = next((f for f in sorted(art_dir.iterdir()) if f.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg", ".webp"}), None) if art_dir.is_dir() else None
+        credit = ASSETS_DIR / "artwork" / "attribution.txt"
+        if art is not None and credit.is_file():  # never show artwork without its attribution
+            st.image(str(art), width="stretch")
+            st.caption(credit.read_text(encoding="utf-8").strip())
+        with st.expander("Acknowledgement of Country", icon=":material/volunteer_activism:"):
+            st.write(ACK_TEXT)
 
 TIER_DESC = {
     "beyond": "&gt;&nbsp;15&nbsp;km, no guide claim (<code translate=\"no\">GAP_KM</code>)",
