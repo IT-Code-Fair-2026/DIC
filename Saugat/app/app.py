@@ -31,7 +31,7 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .block-container { padding-top: 2.2rem; padding-bottom: 3rem; }
+    .block-container { padding-top: 4.5rem; padding-bottom: 3rem; }
 
     /* Title inside Streamlit's top bar (next to Deploy / menu). */
     [data-testid="stHeader"] {
@@ -72,6 +72,21 @@ st.markdown(
     .stat-tile .stat-value .stat-total {
         font-size: 0.9rem; font-weight: 400; color: rgba(255,255,255,0.45);
         letter-spacing: 0;
+    }
+    .page-title {
+        font-size: 1.15rem; font-weight: 500; letter-spacing: -0.01em;
+        color: #EDEDED; line-height: 1.3;
+    }
+    /* Compact the sidebar's built-in header so the team name sits near the top. */
+    [data-testid="stSidebarHeader"] { height: 2.5rem; min-height: 0; margin-bottom: 0; padding-bottom: 0; }
+    .group-name {
+        font-size: 1rem; font-weight: 500; color: #EDEDED;
+        padding: 0 0 14px 0; margin-bottom: 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .group-name .group-label {
+        display: block; font-size: 0.72rem; font-weight: 400;
+        color: rgba(255,255,255,0.50); margin-bottom: 2px;
     }
     h1, h2, h3, h4 { font-weight: 500 !important; letter-spacing: -0.02em; }
 
@@ -231,11 +246,9 @@ HAS_SERVICES = all(c in data.columns for c in (
 # Header
 # ---------------------------------------------------------------------------
 
-st.markdown("## 792 communities, mobile coverage + schools/medical/emergency reach")
-st.caption(
-    "Tower tiers use only GAP_KM = 15 and BUFFER_KM = 10, already defined in the "
-    "source notebook. Services distances (07_services_gap.ipynb) are new — shown "
-    "for context, not folded into the tier."
+st.markdown(
+    '<div class="page-title">792 communities, mobile coverage + schools/medical/emergency reach</div>',
+    unsafe_allow_html=True,
 )
 
 st.write("")
@@ -282,6 +295,12 @@ st.divider()
 # Sidebar filters
 # ---------------------------------------------------------------------------
 
+GROUP_NAME = "Team ASTRA" 
+
+st.sidebar.markdown(
+    f'<div class="group-name"><span class="group-label">Team</span>{GROUP_NAME}</div>',
+    unsafe_allow_html=True,
+)
 st.sidebar.header("Filters")
 
 FILTER_KEYS = [
@@ -416,7 +435,6 @@ map_col, points_col = st.columns([2, 1])
 
 with map_col:
     st.subheader("Map")
-    st.caption("Click a dot — its details appear on the right.")
     legend_html = "".join(
         f'<span class="item"><span class="swatch" style="background:{t["color"]}"></span>{t["name"]}</span>'
         for t in TIERS.values()
