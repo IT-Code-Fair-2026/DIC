@@ -50,29 +50,39 @@ st.markdown(
         font-weight: 700; color: #5B8DEF; margin-bottom: 2px;
     }
 
-    /* Flat, Vercel-style cards: 1px border, no shadow, no accents. */
-    .stat-tile {
-        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 8px; padding: 16px 18px; height: 100%;
-        transition: border-color 150ms ease;
+    /* Right-hand sheet, styled like the left sidebar. */
+    .st-key-right_sheet {
+        position: fixed; top: 60px; right: 0; bottom: 0; width: 340px; z-index: 99;
+        background: #1A1D24; border-left: 1px solid rgba(255,255,255,0.10);
+        padding: 1.25rem 1.25rem 2rem 1.25rem; overflow-y: auto; overscroll-behavior: contain;
     }
-    .stat-tile:hover { border-color: rgba(255,255,255,0.22); }
-    .stat-tile .stat-label {
-        font-size: 0.8rem; color: rgba(255,255,255,0.60); font-weight: 400;
-        display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    .block-container { padding-right: 372px !important; }
+    @media (max-width: 1000px) {
+        .st-key-right_sheet { position: static; width: auto; border-left: 0; }
+        .block-container { padding-right: 1rem !important; }
     }
-    .stat-tile .stat-dot {
+    .sheet-title {
+        font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.50);
+        margin: 4px 0 6px 0;
+    }
+    .stat-row {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .stat-row .stat-label {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.85rem; font-weight: 400; color: rgba(255,255,255,0.72);
+    }
+    .stat-row .stat-dot {
         width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
         background: var(--tier-color, #888);
     }
-    .stat-tile .stat-value {
-        font-size: 1.75rem; font-weight: 500; line-height: 1; color: #EDEDED;
-        letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    .stat-row .stat-value {
+        font-size: 0.95rem; font-weight: 500; color: #EDEDED; white-space: nowrap;
+        font-variant-numeric: tabular-nums;
     }
-    .stat-tile .stat-value .stat-total {
-        font-size: 0.9rem; font-weight: 400; color: rgba(255,255,255,0.45);
-        letter-spacing: 0;
-    }
+    .stat-row .stat-total { font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 4px; }
+    .st-key-right_sheet .sheet-title:not(:first-child) { margin-top: 20px; }
     .page-title {
         font-size: 1.15rem; font-weight: 500; letter-spacing: -0.01em;
         color: #EDEDED; line-height: 1.3;
@@ -251,45 +261,42 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.write("")
-kpi_cols = st.columns(4)
-for col, tier_id in zip(kpi_cols, TIERS):
-    count = int((data["tier_id"] == tier_id).sum())
-    tier = TIERS[tier_id]
-    with col:
+# Right-hand sheet (mirrors the left sidebar): stats first, then the details of
+# whichever map dot was clicked (filled in further down, after the click is read).
+right_sheet = st.container(key="right_sheet")
+
+
+def stat_row(color: str, label: str, value: str, total: str = "") -> str:
+    total_html = f'<span class="stat-total">/&nbsp;{total}</span>' if total else ""
+    return (
+        f'<div class="stat-row"><span class="stat-label"><span class="stat-dot" '
+        f'style="--tier-color:{color};"></span>{label}</span>'
+        f'<span class="stat-value">{value}{total_html}</span></div>'
+    )
+
+
+with right_sheet:
+    tier_rows = "".join(
+        stat_row(TIERS[t]["color"], TIERS[t]["name"], f"{int((data['tier_id'] == t).sum()):,}")
+        for t in TIERS
+    )
+    st.markdown(
+        f'<div class="sheet-title">Priority Tiers</div>{tier_rows}', unsafe_allow_html=True
+    )
+    if HAS_SERVICES:
+        svc_kpis = [
+            ("school", "n_schools_10km", "No school within 10 km"),
+            ("medical", "n_medical_10km", "No medical facility within 10 km"),
+            ("emergency", "n_emergency_10km", "No emergency facility within 10 km"),
+        ]
+        svc_rows = "".join(
+            stat_row(SERVICE_STYLE[k]["color"], label, f"{int((data[c] == 0).sum()):,}", "792")
+            for k, c, label in svc_kpis
+        )
         st.markdown(
-            f"""
-            <div class="stat-tile" style="--tier-color:{tier['color']};">
-                <div class="stat-label"><span class="stat-dot"></span>{tier['name']}</div>
-                <div class="stat-value">{count:,}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f'<div class="sheet-title">Services</div>{svc_rows}', unsafe_allow_html=True
         )
 
-if HAS_SERVICES:
-    st.write("")
-    svc_cols = st.columns(3)
-    svc_kpis = [
-        ("school", "No school within 10 km"),
-        ("medical", "No medical facility within 10 km"),
-        ("emergency", "No emergency facility within 10 km"),
-    ]
-    for col, (prefix, label) in zip(svc_cols, svc_kpis):
-        n_col = "n_schools_10km" if prefix == "school" else f"n_{prefix}_10km"
-        count = int((data[n_col] == 0).sum())
-        with col:
-            st.markdown(
-                f"""
-                <div class="stat-tile" style="--tier-color:{SERVICE_STYLE[prefix]['color']};">
-                    <div class="stat-label"><span class="stat-dot"></span>{label}</div>
-                    <div class="stat-value">{count:,} <span class="stat-total">/&nbsp;792</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-st.divider()
 
 # ---------------------------------------------------------------------------
 # Sidebar filters
@@ -431,7 +438,7 @@ st.write(f"**{len(filtered)}** of {len(data)} communities shown")
 # Map + points list
 # ---------------------------------------------------------------------------
 
-map_col, points_col = st.columns([2, 1])
+map_col = st.container()
 
 with map_col:
     st.subheader("Map")
@@ -585,7 +592,7 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
         stat_cols[i % cols].metric(label, val)
 
 
-with points_col:
+with right_sheet:
     picked_card_id = st.session_state.get("picked_card_id")
     picked = data[data["community_id"] == picked_card_id]
     if not picked.empty:
