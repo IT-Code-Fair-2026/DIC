@@ -19,10 +19,10 @@ Expects village_gap_with_services.csv, sa1_report.csv, and
 services_sites_combined.csv in the same folder as this file.
 """
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 import folium
-import streamlit.components.v1 as components
 from streamlit_folium import st_folium
 
 st.set_page_config(page_title="NT Deadzone Explorer — Services", layout="wide", page_icon="📡")
@@ -32,7 +32,7 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .block-container { padding-top: 4.5rem; padding-bottom: 3rem; }
+    .block-container { padding-top: 3.75rem; padding-bottom: 3rem; }
 
     /* Title inside Streamlit's top bar (next to Deploy / menu). */
     [data-testid="stHeader"] {
@@ -107,9 +107,9 @@ st.markdown(
     }
     .stat-row .stat-total { font-weight: 400; color: rgba(255,255,255,0.45); margin-left: 4px; }
     .st-key-right_sheet .sheet-title:not(:first-child) { margin-top: 20px; }
-    .page-title {
-        font-size: 1.15rem; font-weight: 500; letter-spacing: -0.01em;
-        color: #EDEDED; line-height: 1.3;
+    .result-count {
+        text-align: right; font-size: 0.85rem; font-weight: 400;
+        color: rgba(255,255,255,0.50); font-variant-numeric: tabular-nums;
     }
     /* Compact the sidebar's built-in header so the team name sits near the top. */
     [data-testid="stSidebarHeader"] { height: 2.5rem; min-height: 0; margin-bottom: 0; padding-bottom: 0; }
@@ -277,13 +277,69 @@ HAS_SERVICES = all(c in data.columns for c in (
 ))
 
 # ---------------------------------------------------------------------------
-# Header
+# Map colour modes
 # ---------------------------------------------------------------------------
 
-st.markdown(
-    '<div class="page-title">792 communities, mobile coverage + schools/medical/emergency reach</div>',
-    unsafe_allow_html=True,
-)
+COLOR_MODES = [
+    "Tier", "Tower distance", "Population",
+    "School distance", "Medical distance", "Emergency distance",
+]
+# Cool -> warm ramp reusing the tier hues; every band also has a text label.
+DIST_RAMP = ["#4A90C4", "#D9A441", "#C56A34", "#C23B3B"]
+POP_RAMP = ["#3E4C63", "#5F80B5", "#8DB3EA", "#D6E6FF"]
+NO_DATA = "#6B6F76"
+DIST_BINS = {
+    "km_nearest_tower": [5, 15, 50],
+    "km_nearest_school": [10, 25, 50],
+    "km_nearest_medical": [10, 25, 50],
+    "km_nearest_emergency": [10, 25, 50],
+}
+DIST_COL = {
+    "Tower distance": ("km_nearest_tower", "Nearest tower"),
+    "School distance": ("km_nearest_school", "Nearest school"),
+    "Medical distance": ("km_nearest_medical", "Nearest medical"),
+    "Emergency distance": ("km_nearest_emergency", "Nearest emergency"),
+}
+POP_BINS = [100, 300, 600]
+
+
+def _band_labels(edges: list[int], unit: str) -> list[str]:
+    labels = [f"< {edges[0]} {unit}"]
+    labels += [f"{a}–{b} {unit}" for a, b in zip(edges, edges[1:])]
+    labels.append(f"{edges[-1]}+ {unit}")
+    return labels
+
+
+def colour_dots(df: pd.DataFrame, mode: str):
+    """Per-row dot colour + tooltip metric + legend entries for a colour mode."""
+    if mode == "Tier" or (mode in DIST_COL and DIST_COL[mode][0] not in df.columns):
+        legend = [(t["color"], t["name"]) for t in TIERS.values()]
+        return df["tier_color"], df["tier_name"], legend
+
+    if mode == "Population":
+        edges, ramp, unit = POP_BINS, POP_RAMP, "people"
+        values = df["pop_census_2021"]
+        metric = values.map(lambda x: f"SA1 population {int(x):,}" if pd.notna(x) else "No Census record")
+        title = "SA1 population (2021): "
+    else:
+        col, name = DIST_COL[mode]
+        edges, ramp, unit = DIST_BINS[col], DIST_RAMP, "km"
+        values = df[col]
+        metric = values.map(lambda x: f"{name} {x:.1f} km")
+        title = f"{name}: "
+
+    band = pd.cut(values, bins=[-float("inf")] + edges + [float("inf")], right=False, labels=False)
+    colours = band.map(lambda b: ramp[int(b)] if pd.notna(b) else NO_DATA)
+    labels = _band_labels(edges, unit)
+    legend = [(ramp[i], f"{title if i == 0 else ''}{labels[i]}") for i in range(len(ramp))]
+    if values.isna().any():
+        legend.append((NO_DATA, "No data"))
+    return colours, metric, legend
+
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
 
 # Right-hand sheet (mirrors the left sidebar): stats first, then the details of
 # whichever map dot was clicked (filled in further down, after the click is read).
@@ -346,6 +402,7 @@ FILTER_DEFAULTS = {
     "no_rict_filter": False, "guide_covered_filter": False, "in_nbn_filter": False,
     "no_school_filter": False, "no_medical_filter": False, "no_emergency_filter": False,
     "show_services_filter": False,
+    "color_by": "Tier",
 }
 
 
@@ -357,9 +414,40 @@ def reset_filters() -> None:
     st.session_state.pop("picked_card_id", None)
     st.session_state.pop("_last_map_click", None)
     st.session_state.pop("lookup_pick", None)
+    st.session_state["map_epoch"] = st.session_state.get("map_epoch", 0) + 1
 
 
-st.sidebar.button("↺ Reset filters", use_container_width=True, on_click=reset_filters)
+st.sidebar.button("↺ Reset filters", width="stretch", on_click=reset_filters)
+
+with st.sidebar:
+    # Filters, colour mode and the selected community all live in the address bar,
+    # so this copies a link that reopens the exact same view.
+    st.iframe(
+        """
+        <style>
+          body { margin: 0; font-family: Inter, sans-serif; }
+          button { width: 100%; height: 36px; cursor: pointer; border-radius: 8px;
+                   background: transparent; color: #E6E8EB; font: 500 13px Inter, sans-serif;
+                   border: 1px solid rgba(255,255,255,0.20); }
+          button:hover { border-color: rgba(255,255,255,0.45); }
+          button:focus-visible { outline: 2px solid #5B8DEF; outline-offset: 2px; }
+        </style>
+        <button id="copy" type="button">Copy Link to This View</button>
+        <script>
+          const btn = document.getElementById('copy');
+          btn.addEventListener('click', () => {
+            const t = document.createElement('textarea');
+            t.value = window.parent.location.href;
+            document.body.appendChild(t); t.select();
+            let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+            t.remove();
+            btn.textContent = ok ? 'Link Copied' : 'Copy Failed: Use the Address Bar';
+            setTimeout(() => { btn.textContent = 'Copy Link to This View'; }, 2000);
+          });
+        </script>
+        """,
+        height=44,
+    )
 
 tier_filter = st.sidebar.multiselect(
     "Priority tier",
@@ -367,36 +455,39 @@ tier_filter = st.sidebar.multiselect(
     default=[],
     placeholder="All",
     format_func=lambda t: TIERS[t]["name"],
-    key="tier_filter",
+    key="tier_filter", bind="query-params",
 )
 
 type_options = sorted(data["community_type"].unique())
 type_filter = st.sidebar.multiselect(
-    "Community type", options=type_options, default=[], placeholder="All", key="type_filter"
+    "Community type", options=type_options, default=[], placeholder="All", key="type_filter",
+    bind="query-params",
 )
 
 remote_options = sorted(data["remoteness_name"].unique())
 remote_filter = st.sidebar.multiselect(
-    "Remoteness", options=remote_options, default=[], placeholder="All", key="remote_filter"
+    "Remoteness", options=remote_options, default=[], placeholder="All", key="remote_filter",
+    bind="query-params",
 )
 
 min_tower = st.sidebar.slider(
-    "Nearest tower, at least (km)", 0, 150, 0, key="min_tower_filter"
+    "Nearest tower, at least (km)", 0, 150, 0, key="min_tower_filter",
+    bind="query-params",
 )
 
 st.sidebar.caption("\"All\" means no filter. Pick options to narrow the list.")
 
 with st.sidebar.expander("More filters"):
-    no_rict = st.checkbox("No RICT public access", key="no_rict_filter")
-    guide_covered = st.checkbox("Guide claims coverage", key="guide_covered_filter")
-    in_nbn = st.checkbox("Inside NBN footprint", key="in_nbn_filter")
-    no_school = st.checkbox("No school within 10km", key="no_school_filter", disabled=not HAS_SERVICES)
-    no_medical = st.checkbox("No medical facility within 10km", key="no_medical_filter", disabled=not HAS_SERVICES)
-    no_emergency = st.checkbox("No emergency facility within 10km", key="no_emergency_filter", disabled=not HAS_SERVICES)
+    no_rict = st.checkbox("No RICT public access", key="no_rict_filter", bind="query-params")
+    guide_covered = st.checkbox("Guide claims coverage", key="guide_covered_filter", bind="query-params")
+    in_nbn = st.checkbox("Inside NBN footprint", key="in_nbn_filter", bind="query-params")
+    no_school = st.checkbox("No school within 10km", key="no_school_filter", bind="query-params", disabled=not HAS_SERVICES)
+    no_medical = st.checkbox("No medical facility within 10km", key="no_medical_filter", bind="query-params", disabled=not HAS_SERVICES)
+    no_emergency = st.checkbox("No emergency facility within 10km", key="no_emergency_filter", bind="query-params", disabled=not HAS_SERVICES)
 
 show_services_layer = st.sidebar.checkbox(
     "Show service sites on map (school/medical/emergency)",
-    value=False, key="show_services_filter", disabled=services is None,
+    value=False, key="show_services_filter", bind="query-params", disabled=services is None,
 )
 
 TIER_DESC = {
@@ -456,19 +547,28 @@ if HAS_SERVICES:
         mask &= data["n_emergency_10km"] == 0
 
 filtered = data[mask].copy()
-st.write(f"**{len(filtered)}** of {len(data)} communities shown")
+st.markdown(
+    f'<div class="result-count">{len(filtered):,} of {len(data):,} communities shown</div>',
+    unsafe_allow_html=True,
+)
+
+tab_map, tab_table, tab_insights = st.tabs(["Map", "Table", "Insights"])
 
 # ---------------------------------------------------------------------------
 # Map + points list
 # ---------------------------------------------------------------------------
 
-map_col = st.container()
+map_col = tab_map
 
 with map_col:
-    st.subheader("Map")
+    color_mode = st.segmented_control(
+        "Colour dots by", COLOR_MODES, default="Tier", required=True,
+        key="color_by", bind="query-params",
+    ) or "Tier"
+    dot_color, dot_metric, legend_items = colour_dots(filtered, color_mode)
     legend_html = "".join(
-        f'<span class="item"><span class="swatch" style="background:{t["color"]}"></span>{t["name"]}</span>'
-        for t in TIERS.values()
+        f'<span class="item"><span class="swatch" style="background:{c}"></span>{label}</span>'
+        for c, label in legend_items
     )
     if show_services_layer and services is not None:
         legend_html += "".join(
@@ -485,11 +585,13 @@ with map_col:
         "{ filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }</style>"
     ))
     tooltip_to_id = {}
-    for _, v in filtered.iterrows():
+    for idx, v in filtered.iterrows():
         tooltip_text = (
             f"{v['community_name']} · {v['tier_name']} · "
             f"{v['km_nearest_tower']:.1f} km"
         )
+        if color_mode != "Tier":
+            tooltip_text = f"{v['community_name']} · {dot_metric[idx]}"
         tooltip_to_id[tooltip_text] = v["community_id"]
         folium.CircleMarker(
             location=[v["latitude"], v["longitude"]],
@@ -497,7 +599,7 @@ with map_col:
             color="#0E1117",
             weight=1,
             fill=True,
-            fill_color=v["tier_color"],
+            fill_color=dot_color[idx],
             fill_opacity=0.92,
             tooltip=tooltip_text,
         ).add_to(m)
@@ -521,7 +623,7 @@ with map_col:
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
         # Key changes with the filtered set so the map redraws when filters change.
-        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{st.session_state.get('map_epoch', 0)}",
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{st.session_state.get('map_epoch', 0)}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
@@ -542,6 +644,47 @@ with map_col:
             st.session_state["picked_card_id"] = clicked_id
     if click_sig:
         st.session_state["_last_map_click"] = click_sig
+
+
+def build_stats(v: pd.Series) -> list[tuple[str, object]]:
+    """(label, value) pairs shown in the detail view and the summary download."""
+    pop = v.get("pop_census_2021")
+    stats = [
+        ("Nearest tower", f"{v['km_nearest_tower']:.2f} km"),
+        ("Carriers there", v["nearest_tower_carriers"]),
+        ("Networks there", v["nearest_tower_networks"]),
+        ("Spectrum depth", f"{v['nearest_tower_spectrum_depth_khz']} kHz"),
+        ("Towers within 10km", v["n_towers_10km"]),
+        ("Networks within 10km", v["n_networks_10km"]),
+        ("Nearest built MBSP", f"{v['km_nearest_built_mbsp']:.1f} km"),
+        ("Nearest unbuilt MBSP", f"{v['km_nearest_unbuilt_mbsp']:.1f} km ({v['nearest_unbuilt_mbsp_round']})"),
+        ("RICT sites within 2km", f"{v['n_rict_sites']}" + (f" · {v['rict_site_type']}" if pd.notna(v.get("rict_site_type")) else "")),
+        ("NBN footprint", "fixed-line" if v["in_nbn_fixed_line"] else ("fixed-wireless" if v["in_nbn_fixed_wireless"] else "none")),
+        ("SA1 population (2021)", f"{int(pop):,}" if pd.notna(pop) else "—"),
+        ("Median household income", f"${v['median_hh_income_weekly']:.0f}/wk" if pd.notna(v.get("median_hh_income_weekly")) else "—"),
+    ]
+    if HAS_SERVICES:
+        stats += [
+            ("Nearest school", f"{v['km_nearest_school']:.1f} km" + (f" · {v['nearest_school_name']}" if pd.notna(v.get("nearest_school_name")) else "")),
+            ("Nearest medical", f"{v['km_nearest_medical']:.1f} km" + (f" · {v['nearest_medical_name']}" if pd.notna(v.get("nearest_medical_name")) else "")),
+            ("Nearest emergency", f"{v['km_nearest_emergency']:.1f} km" + (f" · {v['nearest_emergency_name']}" if pd.notna(v.get("nearest_emergency_name")) else "")),
+            ("Schools within 10km", int(v["n_schools_10km"])),
+            ("Medical within 10km", int(v["n_medical_10km"])),
+            ("Emergency within 10km", int(v["n_emergency_10km"])),
+        ]
+    return stats
+
+
+def community_summary(v: pd.Series) -> str:
+    lines = [f"{v['community_name']} — {v['tier_name']}", "", str(v["reason"]), ""]
+    lines += [f"{label}: {val}" for label, val in build_stats(v)]
+    lines += [
+        "",
+        "Population is the whole SA1's 2021 Census count, not a per-village figure.",
+        "Distances are straight-line — triage data, not a coverage guarantee.",
+        "Source: NT Deadzone Explorer (Team ASTRA).",
+    ]
+    return "\n".join(lines)
 
 
 def render_detail(v: pd.Series, cols: int = 4) -> None:
@@ -589,29 +732,7 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
         st.write("**Premises/population benefited:** no Census population record for this SA1.")
 
     stat_cols = st.columns(cols)
-    stats = [
-        ("Nearest tower", f"{v['km_nearest_tower']:.2f} km"),
-        ("Carriers there", v["nearest_tower_carriers"]),
-        ("Networks there", v["nearest_tower_networks"]),
-        ("Spectrum depth", f"{v['nearest_tower_spectrum_depth_khz']} kHz"),
-        ("Towers within 10km", v["n_towers_10km"]),
-        ("Networks within 10km", v["n_networks_10km"]),
-        ("Nearest built MBSP", f"{v['km_nearest_built_mbsp']:.1f} km"),
-        ("Nearest unbuilt MBSP", f"{v['km_nearest_unbuilt_mbsp']:.1f} km ({v['nearest_unbuilt_mbsp_round']})"),
-        ("RICT sites within 2km", f"{v['n_rict_sites']}" + (f" · {v['rict_site_type']}" if pd.notna(v.get("rict_site_type")) else "")),
-        ("NBN footprint", "fixed-line" if v["in_nbn_fixed_line"] else ("fixed-wireless" if v["in_nbn_fixed_wireless"] else "none")),
-        ("SA1 population (2021)", f"{int(pop):,}" if pd.notna(pop) else "—"),
-        ("Median household income", f"${v['median_hh_income_weekly']:.0f}/wk" if pd.notna(v.get("median_hh_income_weekly")) else "—"),
-    ]
-    if HAS_SERVICES:
-        stats += [
-            ("Nearest school", f"{v['km_nearest_school']:.1f} km" + (f" · {v['nearest_school_name']}" if pd.notna(v.get("nearest_school_name")) else "")),
-            ("Nearest medical", f"{v['km_nearest_medical']:.1f} km" + (f" · {v['nearest_medical_name']}" if pd.notna(v.get("nearest_medical_name")) else "")),
-            ("Nearest emergency", f"{v['km_nearest_emergency']:.1f} km" + (f" · {v['nearest_emergency_name']}" if pd.notna(v.get("nearest_emergency_name")) else "")),
-            ("Schools within 10km", int(v["n_schools_10km"])),
-            ("Medical within 10km", int(v["n_medical_10km"])),
-            ("Emergency within 10km", int(v["n_emergency_10km"])),
-        ]
+    stats = build_stats(v)
     for i, (label, val) in enumerate(stats):
         stat_cols[i % cols].metric(label, val)
 
@@ -627,11 +748,191 @@ def close_detail_sheet() -> None:
 def detail_drawer(v: pd.Series) -> None:
     # Not dismissible: an outside click would close it, and the map has to stay
     # clickable while it is open. Close button + Esc (see script below) close it.
-    if st.button("✕ Close", key="close_detail"):
+    close_col, dl_col = st.columns(2)
+    if close_col.button("✕ Close", key="close_detail", width="stretch"):
         close_detail_sheet()
         st.rerun()
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(v["community_name"])).strip("_")
+    dl_col.download_button(
+        "Download Summary", data=community_summary(v), file_name=f"{slug}_summary.txt",
+        mime="text/plain", on_click="ignore", key="dl_summary", width="stretch",
+    )
     render_detail(v, cols=2)
 
+
+
+# ---------------------------------------------------------------------------
+# Table tab
+# ---------------------------------------------------------------------------
+
+TIER_ORDER = [TIERS[t]["name"] for t in TIERS]
+TIER_RANGE = [TIERS[t]["color"] for t in TIERS]
+
+with tab_table:
+    if filtered.empty:
+        st.info("No communities match the current filters. Select Reset Filters to start again.")
+    else:
+        ranked = filtered.sort_values(
+            ["tier_rank", "km_nearest_tower"], ascending=[True, False]
+        ).reset_index(drop=True)
+
+        columns = {
+            "community_name": "Community", "community_type": "Type", "tier_name": "Tier",
+            "remoteness_name": "Remoteness", "km_nearest_tower": "Nearest tower (km)",
+            "n_towers_10km": "Towers within 10 km", "n_networks_10km": "Networks within 10 km",
+            "pop_census_2021": "SA1 population (2021)",
+            "median_hh_income_weekly": "Median household income ($/wk)",
+        }
+        if HAS_SERVICES:
+            columns.update({
+                "km_nearest_school": "Nearest school (km)",
+                "km_nearest_medical": "Nearest medical (km)",
+                "km_nearest_emergency": "Nearest emergency (km)",
+            })
+        view = ranked[list(columns)].rename(columns=columns)
+
+        export = ranked[["community_id", "latitude", "longitude", *columns, "reason"]].rename(
+            columns={**columns, "reason": "Why this tier"}
+        )
+
+        hint_col, dl_col = st.columns([4, 1])
+        hint_col.caption("Select a row to open its details. Select a column header to sort.")
+        dl_col.download_button(
+            "Download CSV", data=export.to_csv(index=False).encode("utf-8"),
+            file_name="nt_communities_filtered.csv", mime="text/csv",
+            on_click="ignore", width="stretch",
+        )
+
+        dist_max = float(data["km_nearest_tower"].max())
+        config = {
+            "Nearest tower (km)": st.column_config.ProgressColumn(
+                "Nearest tower (km)", min_value=0, max_value=dist_max, format="%.1f"),
+            "SA1 population (2021)": st.column_config.ProgressColumn(
+                "SA1 population (2021)", min_value=0,
+                max_value=int(data["pop_census_2021"].max()), format="%d"),
+            "Median household income ($/wk)": st.column_config.NumberColumn(
+                "Median household income ($/wk)", format="$%d"),
+        }
+        for label, col in (("Nearest school (km)", "km_nearest_school"),
+                           ("Nearest medical (km)", "km_nearest_medical"),
+                           ("Nearest emergency (km)", "km_nearest_emergency")):
+            if label in view.columns:
+                config[label] = st.column_config.ProgressColumn(
+                    label, min_value=0, max_value=float(data[col].max()), format="%.1f")
+
+        event = st.dataframe(
+            view, hide_index=True, height=520, width="stretch",
+            column_config=config, on_select="rerun", selection_mode="single-row",
+            key=f"community_table_{st.session_state.get('map_epoch', 0)}",
+        )
+        rows = event.selection.rows if event and event.selection else []
+        table_pick = int(ranked.loc[rows[0], "community_id"]) if rows else None
+        if table_pick != st.session_state.get("_last_table_pick"):
+            if table_pick is not None:
+                st.session_state["picked_card_id"] = table_pick
+            st.session_state["_last_table_pick"] = table_pick
+
+    st.divider()
+    st.subheader("Look up a community")
+    names_sorted = filtered["community_name"].sort_values().tolist()
+    if names_sorted:
+        if st.session_state.get("lookup_pick") not in names_sorted:
+            st.session_state["lookup_pick"] = names_sorted[0]
+
+        pick = st.selectbox(
+            "Choose a community for its full reasoning and raw stats",
+            options=names_sorted,
+            key="lookup_pick",
+        )
+        v = filtered[filtered["community_name"] == pick].iloc[0]
+        render_detail(v, cols=4)
+
+# ---------------------------------------------------------------------------
+# Insights tab
+# ---------------------------------------------------------------------------
+
+with tab_insights:
+    if filtered.empty:
+        st.info("No communities match the current filters. Select Reset Filters to start again.")
+    else:
+        tier_colour = alt.Color(
+            "tier_name:N", title="Tier",
+            scale=alt.Scale(domain=TIER_ORDER, range=TIER_RANGE),
+            legend=alt.Legend(orient="bottom", columns=1, labelLimit=260),
+        )
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Communities by Remoteness & Tier**")
+            by_remote = (
+                filtered.groupby(["remoteness_name", "tier_name"]).size().reset_index(name="Communities")
+            )
+            st.altair_chart(
+                alt.Chart(by_remote).mark_bar().encode(
+                    y=alt.Y("remoteness_name:N", title=None, sort="-x", axis=alt.Axis(labelLimit=260)),
+                    x=alt.X("Communities:Q", title="Communities"),
+                    color=tier_colour,
+                    tooltip=[alt.Tooltip("remoteness_name:N", title="Remoteness"),
+                             alt.Tooltip("tier_name:N", title="Tier"),
+                             alt.Tooltip("Communities:Q")],
+                ).properties(height=280),
+                width="stretch",
+            )
+        with right:
+            st.markdown("**Distance to the Nearest Tower**")
+            st.altair_chart(
+                alt.Chart(filtered).mark_bar().encode(
+                    x=alt.X("km_nearest_tower:Q", bin=alt.Bin(step=10), title="Distance (km)"),
+                    y=alt.Y("count():Q", title="Communities"),
+                    color=alt.Color("tier_name:N", legend=None, scale=alt.Scale(domain=TIER_ORDER, range=TIER_RANGE)),
+                    tooltip=[alt.Tooltip("count():Q", title="Communities")],
+                ).properties(height=280),
+                width="stretch",
+            )
+        if HAS_SERVICES:
+            st.markdown("**Communities With No Service Within 10 km**")
+            gaps = pd.DataFrame({
+                "Service": [SERVICE_STYLE[k]["label"] for k in ("school", "medical", "emergency")],
+                "Communities": [
+                    int((filtered[c] == 0).sum())
+                    for c in ("n_schools_10km", "n_medical_10km", "n_emergency_10km")
+                ],
+            })
+            st.altair_chart(
+                alt.Chart(gaps).mark_bar().encode(
+                    y=alt.Y("Service:N", title=None, sort=None),
+                    x=alt.X("Communities:Q", scale=alt.Scale(domain=[0, max(len(filtered), 1)])),
+                    color=alt.Color(
+                        "Service:N", legend=None,
+                        scale=alt.Scale(
+                            domain=[SERVICE_STYLE[k]["label"] for k in ("school", "medical", "emergency")],
+                            range=[SERVICE_STYLE[k]["color"] for k in ("school", "medical", "emergency")],
+                        ),
+                    ),
+                    tooltip=["Service:N", "Communities:Q"],
+                ).properties(height=140),
+                width="stretch",
+            )
+            st.caption(f"Out of {len(filtered):,} communities currently shown.")
+
+st.divider()
+st.markdown(
+    """
+    <div class="footnote">
+    Triage data, not a coverage guarantee. Every km figure is straight-line,
+    not drive time. A tower licence is permission to transmit, not proof a
+    site is on air. Services distances (school/medical/emergency) are
+    haversine on WGS84, not the projected-CRS method used for towers/MBSP —
+    close enough for triage, slightly less precise. 9 of 273 schools have no
+    coordinate (4 outstation schools with a literal "tba" address, 5 more
+    unresolved) and are excluded from the school distance calc, not guessed.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------------------
+# Detail drawer + community deep link (filters/colour sync via bind="query-params")
+# ---------------------------------------------------------------------------
 
 picked_card_id = st.session_state.get("picked_card_id")
 picked = data[data["community_id"] == picked_card_id]
@@ -639,7 +940,7 @@ if not picked.empty:
     detail_drawer(picked.iloc[0])
 
 # Drag-to-resize handle for the drawer (width is remembered in localStorage).
-components.html(
+st.iframe(
     """
     <script>
     const doc = window.parent.document;
@@ -665,6 +966,14 @@ components.html(
         h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
       });
     }
+    // Streamlit marks the page inert while a dialog is open; lift it so the map,
+    // tabs and filters stay usable next to the drawer.
+    const lift = () => {
+      let e = doc.querySelector('[data-testid="stApp"]');
+      while (e && e !== doc.body) { if (e.inert) e.inert = false; e = e.parentElement; }
+    };
+    new MutationObserver(lift).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['inert'] });
+    lift();
     doc.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const btn = [...doc.querySelectorAll('[role="dialog"] button')].find(b => b.innerText.includes('Close'));
@@ -674,43 +983,19 @@ components.html(
     attach();
     </script>
     """,
-    height=0,
+    height=1,
 )
 
-# ---------------------------------------------------------------------------
-# Detail expander for a selected community
-# ---------------------------------------------------------------------------
+if "_url_boot" not in st.session_state:
+    st.session_state["_url_boot"] = True
+    linked = st.query_params.get("community")
+    if linked and linked.isdigit() and int(linked) in set(data["community_id"]):
+        st.session_state["picked_card_id"] = int(linked)
+        st.rerun()
 
-st.divider()
-st.subheader("Look up a community")
-
-names_sorted = filtered["community_name"].sort_values().tolist()
-if names_sorted:
-    if st.session_state.get("lookup_pick") not in names_sorted:
-        st.session_state["lookup_pick"] = names_sorted[0]
-
-    pick = st.selectbox(
-        "Choose a community for its full reasoning and raw stats",
-        options=names_sorted,
-        key="lookup_pick",
-    )
-    v = filtered[filtered["community_name"] == pick].iloc[0]
-    render_detail(v, cols=4)
-else:
-    st.caption("No communities match the current filters.")
-
-st.divider()
-st.markdown(
-    """
-    <div class="footnote">
-    Triage data, not a coverage guarantee. Every km figure is straight-line,
-    not drive time. A tower licence is permission to transmit, not proof a
-    site is on air. Services distances (school/medical/emergency) are
-    haversine on WGS84, not the projected-CRS method used for towers/MBSP —
-    close enough for triage, slightly less precise. 9 of 273 schools have no
-    coordinate (4 outstation schools with a literal "tba" address, 5 more
-    unresolved) and are excluded from the school distance calc, not guessed.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+_picked = st.session_state.get("picked_card_id")
+if _picked is not None:
+    if st.query_params.get("community") != str(_picked):
+        st.query_params["community"] = str(_picked)
+elif "community" in st.query_params:
+    del st.query_params["community"]
