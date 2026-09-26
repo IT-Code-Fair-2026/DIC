@@ -21,6 +21,7 @@ services_sites_combined.csv in the same folder as this file.
 
 import html
 import math
+from pathlib import Path
 
 import altair as alt
 import numpy as np
@@ -251,9 +252,12 @@ st.markdown(
 # Data loading
 # ---------------------------------------------------------------------------
 
+APP_DIR = Path(__file__).resolve().parent  # data files sit next to app.py, whatever the working directory is
+
+
 @st.cache_data
 def load_data(path: str = "village_gap_with_services.csv") -> pd.DataFrame:
-    df = pd.read_csv(path, dtype={"sa1_code": str})
+    df = pd.read_csv(APP_DIR / path, dtype={"sa1_code": str})
 
     bool_cols = [
         "is_remote", "in_nbn_fixed_line", "in_nbn_fixed_wireless",
@@ -269,7 +273,7 @@ def load_data(path: str = "village_gap_with_services.csv") -> pd.DataFrame:
 
 @st.cache_data
 def load_sa1_report(path: str = "sa1_report.csv") -> pd.DataFrame:
-    df = pd.read_csv(path, dtype={"sa1_code": str})
+    df = pd.read_csv(APP_DIR / path, dtype={"sa1_code": str})
     return df[[
         "sa1_code", "pop_census_2021", "census_pop_suppressed",
         "median_hh_income_weekly", "avg_household_size", "n_villages",
@@ -279,18 +283,18 @@ def load_sa1_report(path: str = "sa1_report.csv") -> pd.DataFrame:
 
 @st.cache_data
 def load_services(path: str = "services_sites_combined.csv") -> pd.DataFrame:
-    df = pd.read_csv(path)
+    df = pd.read_csv(APP_DIR / path)
     return df.dropna(subset=["latitude", "longitude"])
 
 
 @st.cache_data
 def load_towers(path: str = "towers.csv") -> pd.DataFrame:
-    return pd.read_csv(path).dropna(subset=["latitude", "longitude"])
+    return pd.read_csv(APP_DIR / path).dropna(subset=["latitude", "longitude"])
 
 
 @st.cache_data
 def load_small_cells(path: str = "small_cells.csv") -> pd.DataFrame:
-    return pd.read_csv(path)
+    return pd.read_csv(APP_DIR / path)
 
 
 def classify(row: pd.Series) -> tuple[str, str]:
