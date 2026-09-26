@@ -32,7 +32,7 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .block-container { padding-top: 3.75rem; padding-bottom: 3rem; }
+    .block-container { padding-top: 3.75rem; padding-bottom: 1.5rem; }
 
     /* Title inside Streamlit's top bar (next to Deploy / menu). */
     [data-testid="stHeader"] {
@@ -92,6 +92,7 @@ st.markdown(
         .st-key-right_sheet { position: static; width: auto; border-left: 0; }
         .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
     }
+    .st-key-scripts { position: absolute; width: 0; height: 0; overflow: hidden; }
     .st-key-table_box { flex: 0 0 520px; height: 520px; }
     .st-key-table_box [data-testid="stElementContainer"],
     .st-key-table_box [data-testid="stFullScreenFrame"],
@@ -138,7 +139,9 @@ st.markdown(
     [data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail)) {
         background: #0A0A0A; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; box-shadow: none;
     }
-    .st-key-open_search { width: 100%; }
+    .st-key-open_search, .st-key-open_search [data-testid="stButton"] {
+        width: 100%; display: flex; justify-content: flex-end;
+    }
     .st-key-open_search button, .st-key-open_search button * { text-align: left; }
     .st-key-open_search button > div { flex: 1; justify-content: flex-start; }
     .st-key-open_search button span { justify-content: flex-start; }
@@ -152,7 +155,7 @@ st.markdown(
     }
     html[data-mac="1"] .st-key-open_search button::after { content: "⌘K"; }
     .result-count {
-        text-align: right; font-size: 0.85rem; font-weight: 400;
+        text-align: left; font-size: 0.85rem; font-weight: 400;
         color: rgba(255,255,255,0.50); font-variant-numeric: tabular-nums;
     }
     /* Compact the sidebar's built-in header so the team name sits near the top. */
@@ -628,7 +631,7 @@ if HAS_SERVICES:
         mask &= data["n_emergency_10km"] == 0
 
 filtered = data[mask].copy()
-search_col, count_col = st.columns([1, 1], vertical_alignment="center")
+count_col, search_col = st.columns([1, 1], vertical_alignment="center")
 open_palette = search_col.button("Search Communities…", key="open_search", icon=":material/search:")
 count_col.markdown(
     f'<div class="result-count">{len(filtered):,} of {len(data):,} communities shown</div>',
@@ -1037,69 +1040,88 @@ elif not picked.empty:
     detail_drawer(picked.iloc[0])
 
 # Drag-to-resize handle for the drawer (width is remembered in localStorage).
-st.iframe(
-    """
-    <script>
-    const doc = window.parent.document;
-    const KEY = 'detailSheetWidth';
-    try { const w = localStorage.getItem(KEY); if (w) doc.documentElement.style.setProperty('--detail-w', w + 'px'); } catch (e) {}
-    function focusPalette() {
-      const pal = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail))');
-      if (!pal) return;
-      const input = pal.querySelector('input');
-      if (input && input.dataset.astraFocused !== '1') { input.dataset.astraFocused = '1'; input.focus(); }
-    }
-    function attach() {
-      focusPalette();
-      const dlg = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail)');
-      if (!dlg || dlg.querySelector('.sheet-resize-handle')) return;
-      const h = doc.createElement('div');
-      h.className = 'sheet-resize-handle';
-      h.setAttribute('role', 'separator'); h.setAttribute('aria-label', 'Resize panel');
-      dlg.appendChild(h);
-      h.addEventListener('pointerdown', (e) => {
-        e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('dragging');
-        const move = (ev) => {
-          const w = Math.min(Math.max(window.parent.innerWidth - ev.clientX, 340), window.parent.innerWidth * 0.9);
-          doc.documentElement.style.setProperty('--detail-w', w + 'px');
-        };
-        const up = () => {
-          h.classList.remove('dragging'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up);
-          try { localStorage.setItem(KEY, String(parseInt(getComputedStyle(dlg).width))); } catch (e) {}
-        };
-        h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
-      });
-    }
-    // Streamlit marks the page inert while a dialog is open; lift it so the map,
-    // tabs and filters stay usable next to the drawer.
-    const lift = () => {
-      if (!doc.querySelector('.st-key-close_detail')) return;  // only for the drawer
-      let e = doc.querySelector('[data-testid="stApp"]');
-      while (e && e !== doc.body) { if (e.inert) e.inert = false; e = e.parentElement; }
-    };
-    new MutationObserver(lift).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['inert'] });
-    lift();
-    doc.documentElement.dataset.mac = /Mac|iPhone|iPad/.test(window.parent.navigator.platform) ? '1' : '0';
-    if (!window.parent.__astraKeys) {
-      window.parent.__astraKeys = true;
-      doc.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-          const btn = doc.querySelector('.st-key-open_search button');
-          if (btn) { e.preventDefault(); btn.click(); }
+with st.container(key="scripts"):
+    st.iframe(
+        """
+        <script>
+        const doc = window.parent.document;
+        const KEY = 'detailSheetWidth';
+        try { const w = localStorage.getItem(KEY); if (w) doc.documentElement.style.setProperty('--detail-w', w + 'px'); } catch (e) {}
+        function focusPalette() {
+          const pal = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:not(:has(.st-key-close_detail))');
+          if (!pal) return;
+          const input = pal.querySelector('input');
+          if (input && input.dataset.astraFocused !== '1') { input.dataset.astraFocused = '1'; input.focus(); }
         }
-      });
-    }
-    doc.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
-      const btn = [...doc.querySelectorAll('[role="dialog"] button')].find(b => b.innerText.includes('Close'));
-      if (btn) btn.click();
-    });
-    new MutationObserver(attach).observe(doc.body, { childList: true, subtree: true });
-    attach();
-    </script>
-    """,
-    height=1,
-)
+        // Stretch the map and the table so the active tab ends at the bottom of the window.
+        let fitQueued = false;
+        function fitHeights() {
+          fitQueued = false;
+          const room = (el) => Math.max(320, window.parent.innerHeight - el.getBoundingClientRect().top - 24);
+          const map = doc.querySelector('iframe[title*="folium"]');
+          if (map && map.offsetParent) map.style.setProperty('height', room(map) + 'px', 'important');
+          const table = doc.querySelector('.st-key-table_box');
+          if (table && table.offsetParent) {
+            const h = room(table) + 'px';
+            table.style.setProperty('height', h, 'important'); table.style.setProperty('flex-basis', h, 'important');
+          }
+        }
+        function queueFit() { if (!fitQueued) { fitQueued = true; requestAnimationFrame(fitHeights); } }
+        doc.addEventListener('click', () => setTimeout(queueFit, 60));
+        window.parent.addEventListener('resize', queueFit);
+        [300, 1200, 3000].forEach((ms) => setTimeout(queueFit, ms));
+        function attach() {
+          queueFit();
+          focusPalette();
+          const dlg = doc.querySelector('[data-testid="stDialog"] [role="dialog"]:has(.st-key-close_detail)');
+          if (!dlg || dlg.querySelector('.sheet-resize-handle')) return;
+          const h = doc.createElement('div');
+          h.className = 'sheet-resize-handle';
+          h.setAttribute('role', 'separator'); h.setAttribute('aria-label', 'Resize panel');
+          dlg.appendChild(h);
+          h.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('dragging');
+            const move = (ev) => {
+              const w = Math.min(Math.max(window.parent.innerWidth - ev.clientX, 340), window.parent.innerWidth * 0.9);
+              doc.documentElement.style.setProperty('--detail-w', w + 'px');
+            };
+            const up = () => {
+              h.classList.remove('dragging'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up);
+              try { localStorage.setItem(KEY, String(parseInt(getComputedStyle(dlg).width))); } catch (e) {}
+            };
+            h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+          });
+        }
+        // Streamlit marks the page inert while a dialog is open; lift it so the map,
+        // tabs and filters stay usable next to the drawer.
+        const lift = () => {
+          if (!doc.querySelector('.st-key-close_detail')) return;  // only for the drawer
+          let e = doc.querySelector('[data-testid="stApp"]');
+          while (e && e !== doc.body) { if (e.inert) e.inert = false; e = e.parentElement; }
+        };
+        new MutationObserver(lift).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['inert'] });
+        lift();
+        doc.documentElement.dataset.mac = /Mac|iPhone|iPad/.test(window.parent.navigator.platform) ? '1' : '0';
+        if (!window.parent.__astraKeys) {
+          window.parent.__astraKeys = true;
+          doc.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+              const btn = doc.querySelector('.st-key-open_search button');
+              if (btn) { e.preventDefault(); btn.click(); }
+            }
+          });
+        }
+        doc.addEventListener('keydown', (e) => {
+          if (e.key !== 'Escape') return;
+          const btn = [...doc.querySelectorAll('[role="dialog"] button')].find(b => b.innerText.includes('Close'));
+          if (btn) btn.click();
+        });
+        new MutationObserver(attach).observe(doc.body, { childList: true, subtree: true });
+        attach();
+        </script>
+        """,
+        height=1,
+    )
 
 if "_url_boot" not in st.session_state:
     st.session_state["_url_boot"] = True
