@@ -22,6 +22,7 @@ services_sites_combined.csv in the same folder as this file.
 import pandas as pd
 import streamlit as st
 import folium
+import streamlit.components.v1 as components
 from streamlit_folium import st_folium
 
 st.set_page_config(page_title="NT Deadzone Explorer — Services", layout="wide", page_icon="📡")
@@ -57,7 +58,30 @@ st.markdown(
         padding: 1.25rem 1.25rem 2rem 1.25rem; overflow-y: auto; overscroll-behavior: contain;
     }
     .block-container { padding-right: 372px !important; }
+    /* st.dialog restyled as a right-hand drawer. The backdrop ignores pointer
+       events so the map stays clickable while the drawer is open. */
+    [data-testid="stDialog"] { pointer-events: none; background: transparent !important; }
+    [data-testid="stDialog"] > div { background: transparent !important; align-items: stretch; justify-content: flex-end; }
+    [data-testid="stDialog"] [role="dialog"] {
+        pointer-events: auto; position: fixed; top: 60px; right: 0; bottom: 0; left: auto;
+        width: var(--detail-w, 420px) !important; max-width: 90vw; height: auto; max-height: none;
+        margin: 0; border-radius: 0; box-shadow: none;
+        background: #1A1D24 !important; opacity: 1; border-left: 1px solid rgba(255,255,255,0.10);
+        overflow-y: auto; overscroll-behavior: contain;
+        animation: sheet-in 200ms ease-out;
+    }
+    [data-testid="stDialog"] [data-testid="stMetricValue"] { font-size: 1.05rem; font-weight: 500; }
+    [data-testid="stDialog"] [data-testid="stMetricValue"] * { white-space: normal; overflow: visible; text-overflow: clip; }
+    [data-testid="stDialog"] [data-testid="stMetricLabel"] { font-size: 0.75rem; color: rgba(255,255,255,0.55); }
+    .sheet-resize-handle {
+        position: absolute; top: 0; left: 0; bottom: 0; width: 6px; cursor: col-resize;
+        z-index: 5; touch-action: none;
+    }
+    .sheet-resize-handle:hover, .sheet-resize-handle.dragging { background: rgba(91,141,239,0.55); }
+    @keyframes sheet-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { [data-testid="stDialog"] [role="dialog"] { animation: none; } }
     @media (max-width: 1000px) {
+        [data-testid="stDialog"] [role="dialog"] { top: 0; width: 100vw !important; max-width: 100vw; }
         .st-key-right_sheet { position: static; width: auto; border-left: 0; }
         .block-container { padding-right: 1rem !important; }
     }
@@ -497,7 +521,7 @@ with map_col:
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
         # Key changes with the filtered set so the map redraws when filters change.
-        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}",
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{st.session_state.get('map_epoch', 0)}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
@@ -592,11 +616,66 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
         stat_cols[i % cols].metric(label, val)
 
 
-with right_sheet:
-    picked_card_id = st.session_state.get("picked_card_id")
-    picked = data[data["community_id"] == picked_card_id]
-    if not picked.empty:
-        render_detail(picked.iloc[0], cols=2)
+def close_detail_sheet() -> None:
+    st.session_state.pop("picked_card_id", None)
+    st.session_state.pop("_last_map_click", None)
+    # New map key => the map forgets its last click, so the same dot can be reopened.
+    st.session_state["map_epoch"] = st.session_state.get("map_epoch", 0) + 1
+
+
+@st.dialog("Community Details", width="large", dismissible=False)
+def detail_drawer(v: pd.Series) -> None:
+    # Not dismissible: an outside click would close it, and the map has to stay
+    # clickable while it is open. Close button + Esc (see script below) close it.
+    if st.button("✕ Close", key="close_detail"):
+        close_detail_sheet()
+        st.rerun()
+    render_detail(v, cols=2)
+
+
+picked_card_id = st.session_state.get("picked_card_id")
+picked = data[data["community_id"] == picked_card_id]
+if not picked.empty:
+    detail_drawer(picked.iloc[0])
+
+# Drag-to-resize handle for the drawer (width is remembered in localStorage).
+components.html(
+    """
+    <script>
+    const doc = window.parent.document;
+    const KEY = 'detailSheetWidth';
+    try { const w = localStorage.getItem(KEY); if (w) doc.documentElement.style.setProperty('--detail-w', w + 'px'); } catch (e) {}
+    function attach() {
+      const dlg = doc.querySelector('[data-testid="stDialog"] [role="dialog"]');
+      if (!dlg || dlg.querySelector('.sheet-resize-handle')) return;
+      const h = doc.createElement('div');
+      h.className = 'sheet-resize-handle';
+      h.setAttribute('role', 'separator'); h.setAttribute('aria-label', 'Resize panel');
+      dlg.appendChild(h);
+      h.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('dragging');
+        const move = (ev) => {
+          const w = Math.min(Math.max(window.parent.innerWidth - ev.clientX, 320), window.parent.innerWidth * 0.9);
+          doc.documentElement.style.setProperty('--detail-w', w + 'px');
+        };
+        const up = () => {
+          h.classList.remove('dragging'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up);
+          try { localStorage.setItem(KEY, String(parseInt(getComputedStyle(dlg).width))); } catch (e) {}
+        };
+        h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+      });
+    }
+    doc.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const btn = [...doc.querySelectorAll('[role="dialog"] button')].find(b => b.innerText.includes('Close'));
+      if (btn) btn.click();
+    });
+    new MutationObserver(attach).observe(doc.body, { childList: true, subtree: true });
+    attach();
+    </script>
+    """,
+    height=0,
+)
 
 # ---------------------------------------------------------------------------
 # Detail expander for a selected community
