@@ -895,7 +895,7 @@ count_col.markdown(
     unsafe_allow_html=True,
 )
 
-tab_map, tab_table, tab_insights = st.tabs(["Map", "Table", "Insights"])
+tab_map, tab_table, tab_insights, tab_plan = st.tabs(["Map", "Table", "Insights", "Recommendations"])
 
 # ---------------------------------------------------------------------------
 # Map + points list
@@ -1382,6 +1382,207 @@ with tab_insights:
                 width="stretch",
             )
             st.caption(f"Out of {len(filtered):,} communities currently shown.")
+
+# ---------------------------------------------------------------------------
+# Recommendations tab: where should new or backup coverage go first?
+# ---------------------------------------------------------------------------
+#
+# Method (kept out of the UI on purpose; this is what the report should describe):
+# - Demand = the census population of every SA1 that holds a target community.
+#   An SA1's population is counted ONCE, at the centre of its target communities,
+#   and never split across villages (project rule 3). BushTel populations are not used.
+# - Candidate sites = the target communities themselves (a hub is a real place).
+# - A hub "reaches" an SA1 when that SA1's centre is within the service radius.
+#   The radii come from the NT coverage guide (small cell up to 5 km, macro cell up to
+#   40 km) plus the project's own 15 km gap threshold, so they are upper bounds.
+# - Primary algorithm: greedy maximum coverage. Repeatedly pick the site that reaches
+#   the most people not yet reached. For this objective greedy is within (1 - 1/e) of
+#   the best possible answer (Nemhauser, Wolsey & Fisher, 1978).
+# - Baseline: population-weighted k-means (k-means++ start), each centre snapped to the
+#   nearest real community, so the two methods are compared on the same objective.
+# - Straight-line distances, triage only: not a coverage guarantee and not a costed plan.
+
+PLAN_TARGETS = ["No tower within 10 km", "Sole provider only", "Both"]
+PLAN_RADII = {"5 km · small cell": 5, "15 km · gap threshold": 15, "40 km · macro cell": 40}
+PLAN_K_MAX = 30
+
+
+def _hav_matrix(lat1, lon1, lat2, lon2) -> np.ndarray:
+    """Great-circle km between every (lat1, lon1) row and (lat2, lon2) column."""
+    p = np.pi / 180
+    a = (np.sin((lat2[None, :] - lat1[:, None]) * p / 2) ** 2
+         + np.cos(lat1[:, None] * p) * np.cos(lat2[None, :] * p) * np.sin((lon2[None, :] - lon1[:, None]) * p / 2) ** 2)
+    return 2 * 6371.0088 * np.arcsin(np.sqrt(a))
+
+
+def _weighted_kmeans_centres(lat, lon, w, k, seed=0, iters=30):
+    rng = np.random.default_rng(seed)
+    prob = (w + 1e-9) / (w + 1e-9).sum()
+    first = rng.choice(len(lat), p=prob)
+    centres = [(lat[first], lon[first])]
+    for _ in range(1, k):  # k-means++ start, weighted by population
+        dist = _hav_matrix(lat, lon, np.array([c[0] for c in centres]), np.array([c[1] for c in centres])).min(1)
+        pr = (dist ** 2) * (w + 1e-9)
+        pr = pr / pr.sum() if pr.sum() > 0 else prob
+        nxt = rng.choice(len(lat), p=pr)
+        centres.append((lat[nxt], lon[nxt]))
+    c_lat, c_lon = np.array([c[0] for c in centres]), np.array([c[1] for c in centres])
+    for _ in range(iters):
+        assign = _hav_matrix(lat, lon, c_lat, c_lon).argmin(1)
+        for j in range(k):
+            m = assign == j
+            if m.any():
+                c_lat[j], c_lon[j] = np.average(lat[m], weights=w[m] + 1e-9), np.average(lon[m], weights=w[m] + 1e-9)
+    return c_lat, c_lon
+
+
+@st.cache_data
+def plan_sites(target: str, radius_km: int) -> dict:
+    if target == "No tower within 10 km":
+        mask = data["networks_10km"].map(len) == 0
+    elif target == "Sole provider only":
+        mask = data["sole_network"].notna()
+    else:
+        mask = (data["networks_10km"].map(len) == 0) | data["sole_network"].notna()
+    cand = data[mask].reset_index(drop=True)
+    sa1 = cand.groupby("sa1_code").agg(
+        pop=("pop_census_2021", "first"), lat=("latitude", "mean"), lon=("longitude", "mean"), n=("community_id", "size"),
+    ).reset_index()
+    sa1["pop"] = sa1["pop"].fillna(0)
+    w = sa1["pop"].to_numpy(float)
+    reach = _hav_matrix(sa1["lat"].to_numpy(), sa1["lon"].to_numpy(),
+                        cand["latitude"].to_numpy(), cand["longitude"].to_numpy()) <= radius_km  # SA1 x candidate
+
+    order, newly = [], []
+    covered = np.zeros(len(sa1), bool)
+    for _ in range(min(PLAN_K_MAX, len(cand))):  # greedy maximum coverage
+        gain = ((reach & ~covered[:, None]) * w[:, None]).sum(0)
+        j = int(gain.argmax())
+        if gain[j] <= 0:
+            break
+        order.append(j)
+        newly.append(np.flatnonzero(reach[:, j] & ~covered))
+        covered |= reach[:, j]
+    greedy_curve = np.cumsum([w[idx].sum() for idx in newly])
+
+    base_curve = []
+    for k in range(1, len(order) + 1):  # baseline: population-weighted k-means, snapped to real communities
+        c_lat, c_lon = _weighted_kmeans_centres(sa1["lat"].to_numpy(), sa1["lon"].to_numpy(), w, k)
+        snapped = _hav_matrix(c_lat, c_lon, cand["latitude"].to_numpy(), cand["longitude"].to_numpy()).argmin(1)
+        base_curve.append(w[reach[:, snapped].any(1)].sum())
+    return {"cand": cand, "sa1": sa1, "order": order, "newly": newly, "greedy": greedy_curve,
+            "base": np.array(base_curve), "total": float(w.sum())}
+
+
+with tab_plan:
+    if towers is None:
+        st.info("The tower file is missing, so recommendations can't be calculated.")
+    else:
+        c1, c2, c3 = st.columns([5, 6, 3], vertical_alignment="bottom")
+        plan_target = c1.segmented_control("Who to reach", PLAN_TARGETS, default=PLAN_TARGETS[0], required=True, key="plan_target")
+        plan_radius_label = c2.segmented_control("Reach of each site", list(PLAN_RADII), default="40 km · macro cell", required=True, key="plan_radius")
+        plan = plan_sites(plan_target or PLAN_TARGETS[0], PLAN_RADII[plan_radius_label or "40 km · macro cell"])
+        radius = PLAN_RADII[plan_radius_label or "40 km · macro cell"]
+        max_sites = max(len(plan["order"]), 1)
+        if st.session_state.get("plan_k", 1) > max_sites:  # a shorter list must not leave the slider out of range
+            st.session_state["plan_k"] = max_sites
+        sites_k = c3.slider("Sites", 1, max_sites, min(10, max_sites), key="plan_k")
+
+        order = plan["order"][:sites_k]
+        cand, sa1 = plan["cand"], plan["sa1"]
+        total = plan["total"]
+        reached_people = float(plan["greedy"][sites_k - 1]) if len(plan["greedy"]) else 0.0
+        hub_lat, hub_lon = cand["latitude"].to_numpy()[order], cand["longitude"].to_numpy()[order]
+        village_dist = _hav_matrix(cand["latitude"].to_numpy(), cand["longitude"].to_numpy(), hub_lat, hub_lon)
+        village_reached = (village_dist <= radius).any(1)
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("People in target areas", f"{int(total):,}")
+        m2.metric(f"Reached by {sites_k} sites", f"{int(reached_people):,}")
+        m3.metric("Share reached", f"{reached_people / total:.0%}" if total else "—")
+        m4.metric("Communities within reach", f"{int(village_reached.sum()):,} of {len(cand):,}")
+
+        if len(order):
+            top = ", ".join(str(cand["community_name"].iloc[j]).title() for j in order[:3])
+            st.markdown(
+                f"**Start with {top}.** {sites_k} sites bring coverage within {radius} km of "
+                f"**{int(reached_people):,} people ({reached_people / total:.0%})**."
+            )
+
+        left, right = st.columns([1, 1])
+        with left:
+            st.markdown("**People Reached vs Number of Sites**")
+            ks = np.arange(1, len(plan["greedy"]) + 1)
+            curve = pd.concat([
+                pd.DataFrame({"Sites": ks, "Share": plan["greedy"] / total, "Method": "Greedy max-coverage"}),
+                pd.DataFrame({"Sites": ks, "Share": plan["base"] / total, "Method": "Population-weighted k-means"}),
+            ])
+            line = alt.Chart(curve).mark_line(point=True).encode(
+                x=alt.X("Sites:Q", scale=alt.Scale(nice=False)),
+                y=alt.Y("Share:Q", axis=alt.Axis(format="%"), title="People reached"),
+                color=alt.Color("Method:N", scale=alt.Scale(
+                    domain=["Greedy max-coverage", "Population-weighted k-means"], range=["#009E73", "#6B6F76"]),
+                    legend=alt.Legend(orient="bottom", columns=1, labelLimit=300)),
+                strokeDash=alt.StrokeDash("Method:N", legend=None, scale=alt.Scale(
+                    domain=["Greedy max-coverage", "Population-weighted k-means"], range=[[1, 0], [4, 4]])),
+                tooltip=["Method:N", "Sites:Q", alt.Tooltip("Share:Q", format=".1%")],
+            )
+            rule = alt.Chart(pd.DataFrame({"Sites": [sites_k]})).mark_rule(color="#EDEDED", strokeDash=[2, 4]).encode(x="Sites:Q")
+            st.altair_chart((line + rule).properties(height=300), width="stretch")
+        with right:
+            st.markdown("**Recommended Sites**")
+            rows, cum = [], 0.0
+            for rank, (j, idx) in enumerate(zip(order, plan["newly"][:sites_k]), start=1):
+                new_people = float(sa1["pop"].to_numpy()[idx].sum())
+                cum += new_people
+                r = cand.iloc[j]
+                rows.append({
+                    "#": rank, "Community": str(r["community_name"]), "New people": int(new_people),
+                    "Cumulative share": cum / total if total else 0.0,
+                    "Communities within reach": int((village_dist[:, rank - 1] <= radius).sum()),
+                    "Providers now": r["providers_text"], "Nearest tower (km)": float(r["km_nearest_tower"]),
+                })
+            sites_df = pd.DataFrame(rows)
+            st.dataframe(
+                sites_df, hide_index=True, width="stretch", height=300,
+                column_config={
+                    "Cumulative share": st.column_config.ProgressColumn("Cumulative share", min_value=0, max_value=1, format="percent"),
+                    "New people": st.column_config.NumberColumn("New people", format="%d"),
+                    "Nearest tower (km)": st.column_config.NumberColumn("Nearest tower (km)", format="%.1f"),
+                },
+            )
+            st.download_button(
+                "Download Sites", icon=":material/download:", data=sites_df.to_csv(index=False).encode("utf-8"),
+                file_name="recommended_sites.csv", mime="text/csv", on_click="ignore",
+            )
+
+        # Map: target communities (reached = white, not yet reached = grey) and numbered hubs with their reach.
+        plan_map = folium.Map(location=[-19.5, 133.5], zoom_start=5, tiles="OpenStreetMap", prefer_canvas=True)
+        plan_map.get_root().header.add_child(folium.Element(
+            "<style>.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }</style>"
+        ))
+        for j in range(len(order)):
+            folium.Circle([hub_lat[j], hub_lon[j]], radius=radius * 1000, color="#009E73", weight=1,
+                          dash_array="4 6", fill=True, fill_color="#009E73", fill_opacity=0.06, interactive=False).add_to(plan_map)
+        for i, r in cand.iterrows():
+            folium.CircleMarker(
+                [r["latitude"], r["longitude"]], radius=3, weight=0, fill=True, fill_opacity=0.9,
+                fill_color="#EDEDED" if village_reached[i] else "#6B6F76",
+                tooltip=f"{r['community_name']} · {r['providers_text']}",
+            ).add_to(plan_map)
+        for rank, j in enumerate(order, start=1):
+            folium.Marker(
+                [hub_lat[rank - 1], hub_lon[rank - 1]],
+                icon=folium.DivIcon(
+                    html=(f'<div style="width:26px;height:26px;border-radius:50%;background:#009E73;color:#fff;'
+                          f'font:700 12px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;'
+                          f'border:2px solid #0A0A0A;">{rank}</div>'),
+                    icon_size=(26, 26), icon_anchor=(13, 13)),
+                tooltip=f"{rank} · {cand['community_name'].iloc[j]}",
+                z_index_offset=1000,
+            ).add_to(plan_map)
+        st_folium(plan_map, height=520, use_container_width=True, returned_objects=[],
+                  key=f"plan_map_{plan_target}_{radius}_{sites_k}")
 
 # Data caveats (kept out of the UI on purpose):
 # - Triage data, not a coverage guarantee. Every km figure is straight-line, not
