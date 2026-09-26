@@ -108,6 +108,8 @@ st.markdown(
         text-transform: none; white-space: nowrap; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
     }
     .mi.fill { font-variation-settings: 'FILL' 1; }
+    .range-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0 12px 0; }
+    .range-row .mi { font-size: 1.3rem; margin-top: 2px; }
     .near-summary { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
     .near-summary .n { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
     .near-summary_ { font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
@@ -286,6 +288,11 @@ def load_towers(path: str = "towers.csv") -> pd.DataFrame:
     return pd.read_csv(path).dropna(subset=["latitude", "longitude"])
 
 
+@st.cache_data
+def load_small_cells(path: str = "small_cells.csv") -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
 def classify(row: pd.Series) -> tuple[str, str]:
     """Unchanged from the original app — tower-based tier, GAP_KM/BUFFER_KM
     only. The services columns added by 07_services_gap.ipynb are shown
@@ -378,6 +385,11 @@ try:
 except FileNotFoundError:
     towers = None
 
+try:
+    small_cells = load_small_cells()
+except FileNotFoundError:
+    small_cells = None
+
 data = prepare(raw)
 if sa1_report is not None:
     data = data.merge(sa1_report, on="sa1_code", how="left")
@@ -406,6 +418,30 @@ def _haversine_km(lat: float, lon: float, lats: np.ndarray, lons: np.ndarray) ->
     return 2 * 6371.0088 * np.arcsin(np.sqrt(a))
 
 
+# Tower range comes from the NT government mobile coverage guide
+# (data/raw/nt_mobile_coverage/mobile-coverage-all-sites.xlsx): "macro cell (up to
+# 40 km coverage), small cell (up to 5 km coverage) ... Coverage varies according to
+# local conditions especially topography and vegetation and this list is a GUIDE
+# only." So both figures are upper bounds, not a coverage guarantee.
+# The guide names 24 small-cell sites (small_cells.csv). A tower counts as a small
+# cell when one of those sites is within 0.5 km AND that provider is among the
+# tower's carriers; every other tower is treated as a macro cell. Shared sites
+# (e.g. an Optus small cell next to a Telstra macro tower) can therefore be
+# labelled by the guide's provider only.
+MACRO_KM, SMALL_KM = 40, 5
+
+
+@st.cache_data
+def tower_cell_types() -> pd.Series:
+    cells = pd.Series("macro", index=towers.index)
+    if small_cells is not None:
+        for _, sc in small_cells.iterrows():
+            d = _haversine_km(sc["latitude"], sc["longitude"], towers["latitude"].to_numpy(), towers["longitude"].to_numpy())
+            has_provider = towers["carriers"].str.contains(str(sc["provider"]), case=False, na=False).to_numpy()
+            cells[(d <= 0.5) & has_provider] = "small"
+    return cells
+
+
 @st.cache_data
 def nearby_for_id(community_id: int) -> pd.DataFrame:
     """Every tower/school/medical/emergency site with its straight-line km from
@@ -414,10 +450,13 @@ def nearby_for_id(community_id: int) -> pd.DataFrame:
     row = data[data["community_id"] == community_id].iloc[0]
     frames = []
     if towers is not None:
-        detail = towers["carriers"].str.replace(";", ", ") + " · " + towers["n_transmitters"].astype(str) + " transmitters"
+        cell = tower_cell_types()
+        detail = (towers["carriers"].str.replace(";", ", ") + " · " + towers["n_transmitters"].astype(str)
+                  + " transmitters · " + cell + " cell")
         detail = detail.where(~towers["is_planning_site"], detail + " (planned)")
         frames.append(pd.DataFrame({"kind": "tower", "name": towers["name"], "latitude": towers["latitude"],
-                                    "longitude": towers["longitude"], "detail": detail}))
+                                    "longitude": towers["longitude"], "detail": detail,
+                                    "cell": cell, "range_km": cell.map({"macro": MACRO_KM, "small": SMALL_KM})}))
     if services is not None:
         for src in ("school", "medical", "emergency"):
             sub = services[services["source"] == src]
@@ -448,6 +487,21 @@ def nearby_section(v: pd.Series) -> None:
     if items.empty:
         return
     within = items[items["km"] <= NEARBY_KM]
+    towers_here = items[items["kind"] == "tower"]
+    if not towers_here.empty:
+        t0 = towers_here.iloc[0]
+        reach_km = float(t0["range_km"])
+        inside = float(t0["km"]) <= reach_km
+        verdict = "Inside guide range" if inside else f"{float(t0['km']) - reach_km:.1f} km beyond guide range"
+        st.markdown("**Nearest Tower Range**")
+        st.markdown(
+            f'<div class="range-row">{mi("check_circle" if inside else "cancel", "#4ADE80" if inside else "#F87171")}'
+            f'<div><div class="near-name">{html.escape(str(t0["name"]))}</div>'
+            f'<div class="near-detail">{float(t0["km"]):.1f} km away · guide range up to {reach_km:g} km '
+            f'({t0["cell"]} cell)</div>'
+            f'<div class="near-name">{verdict}</div></div></div>',
+            unsafe_allow_html=True,
+        )
     st.markdown(f"**Nearby Within {NEARBY_KM} km**")
     summary = "".join(
         f'<span class="n" title="{KIND_STYLE[k]["label"]}">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])}'
@@ -773,6 +827,12 @@ with map_col:
         "Colour dots by", COLOR_MODES, default="Tier", required=True,
         key="color_by", bind="query-params",
     ) or "Tier"
+    _pk = st.session_state.get("picked_card_id")
+    focus_view = "Nearby"
+    if towers is not None and _pk is not None and (data["community_id"] == _pk).any():
+        focus_view = st.segmented_control(
+            "Map view", ["Nearby", "Tower range"], default="Nearby", required=True, key="focus_view",
+        ) or "Nearby"
     dot_color, dot_metric, legend_items = colour_dots(filtered, color_mode)
     legend_html = "".join(
         f'<span class="item"><span class="swatch" style="background:{c}"></span>{label}</span>'
@@ -786,6 +846,7 @@ with map_col:
     _picked_now = st.session_state.get("picked_card_id")
     if _picked_now is not None and (data["community_id"] == _picked_now).any():
         legend_html += '<span class="item"><span class="mi fill" style="color:#FFFFFF;">location_on</span> Selected community</span>'
+        legend_html += f'<span class="item">{mi("radio_button_unchecked", KIND_STYLE["tower"]["color"])} Nearest tower range</span>'
         legend_html += "".join(
             f'<span class="item">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])} {KIND_STYLE[k]["one"]}</span>' for k in NEARBY_ORDER
         ) + f'<span class="item">Dashed: nearest of each kind · circle: {NEARBY_KM} km</span>'
@@ -798,12 +859,21 @@ with map_col:
     # A selected community re-centres the map on it. The zoom fits the 10 km radius,
     # or zooms out (up to 150 km) so the nearest site of each kind is in view too.
     focus_zoom = 5
+    focus_center = [-19.5, 133.5]
     if focus is not None:
-        reach = float(min(max(nearby_for_id(int(focus["community_id"])).groupby("kind")["km"].min().max(), NEARBY_KM), 150))
+        focus_center = [float(focus["latitude"]), float(focus["longitude"])]
+        focus_items = nearby_for_id(int(focus["community_id"]))
+        reach = float(min(max(focus_items.groupby("kind")["km"].min().max(), NEARBY_KM), 150))
+        focus_towers = focus_items[focus_items["kind"] == "tower"]
+        if focus_view == "Tower range" and not focus_towers.empty:
+            # Frame the nearest tower's whole range ring and the community together.
+            t0 = focus_towers.iloc[0]
+            focus_center = [(focus_center[0] + float(t0["latitude"])) / 2, (focus_center[1] + float(t0["longitude"])) / 2]
+            reach = (float(t0["km"]) / 2 + float(t0["range_km"])) * 1.05
         mpp = reach * 1000 * 1.15 / 270  # metres per pixel that fit `reach` in half the map height
-        focus_zoom = int(max(7, min(11, math.floor(math.log2(156543.03 * math.cos(math.radians(float(focus["latitude"]))) / mpp)))))
+        focus_zoom = int(max(6, min(11, math.floor(math.log2(156543.03 * math.cos(math.radians(focus_center[0])) / mpp)))))
     m = folium.Map(
-        location=[float(focus["latitude"]), float(focus["longitude"])] if focus is not None else [-19.5, 133.5],
+        location=focus_center,
         zoom_start=focus_zoom, tiles="OpenStreetMap", prefer_canvas=True,
     )
     if focus is not None:
@@ -811,7 +881,18 @@ with map_col:
         folium.Circle(
             [float(focus["latitude"]), float(focus["longitude"])], radius=NEARBY_KM * 1000,
             color="#EDEDED", weight=1, dash_array="4 6", fill=True, fill_color="#EDEDED", fill_opacity=0.05,
+            interactive=False,
         ).add_to(m)
+        # Nearest tower's range ring (guide upper bound: 40 km macro, 5 km small cell).
+        _tw = nearby_for_id(int(focus["community_id"]))
+        _tw = _tw[_tw["kind"] == "tower"]
+        if not _tw.empty:
+            _t0 = _tw.iloc[0]
+            folium.Circle(
+                [float(_t0["latitude"]), float(_t0["longitude"])], radius=float(_t0["range_km"]) * 1000,
+                color=KIND_STYLE["tower"]["color"], weight=1.5, dash_array="2 6", fill=True,
+                fill_color=KIND_STYLE["tower"]["color"], fill_opacity=0.05, interactive=False,
+            ).add_to(m)
     m.get_root().header.add_child(folium.Element(
         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block">'
         '<style>.mi{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:15px;'
@@ -879,7 +960,8 @@ with map_col:
                           f'justify-content:center;"><span class="mi" style="color:{st_["color"]};">{st_["icon"]}</span></div>'),
                     icon_size=(24, 24), icon_anchor=(12, 12),
                 ),
-                tooltip=f"{st_['one']} · {it['name']} · {it['km']:.1f} km",
+                tooltip=(f"{st_['one']} · {it['name']} · {it['km']:.1f} km"
+                         + (f" · range up to {it['range_km']:g} km" if it["kind"] == "tower" else "")),
             ).add_to(m)
         # Dashed line to the nearest site of each kind, even when it is beyond 10 km.
         for _, it in nearest_each.iterrows():
@@ -907,7 +989,7 @@ with map_col:
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
         # Key changes with the filtered set so the map redraws when filters change.
-        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{focus_id}_{st.session_state.get('locate_nonce', 0)}_{st.session_state.get('map_epoch', 0)}",
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{focus_id}_{focus_view}_{st.session_state.get('locate_nonce', 0)}_{st.session_state.get('map_epoch', 0)}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
