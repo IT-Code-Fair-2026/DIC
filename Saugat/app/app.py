@@ -38,10 +38,10 @@ st.markdown(
         background: #0E1117; border-bottom: 1px solid rgba(255,255,255,0.08);
     }
     [data-testid="stHeader"]::before {
-        content: "NT Deadzone Explorer   ·   Remote Connectivity — CDU IT Code Fair, Data Innovation Challenge 2026";
+        content: "NT Deadzone Explorer   ·   Remote Connectivity | CDU IT Code Fair, Data Innovation Challenge 2026";
         position: absolute; left: 5rem; top: 50%; transform: translateY(-50%);
         max-width: calc(100% - 12rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        font-size: 0.95rem; font-weight: 600; letter-spacing: 0.02em;
+        font-size: 0.95rem; font-weight: 500; letter-spacing: 0.02em;
         color: #E6E8EB; pointer-events: none;
     }
 
@@ -50,16 +50,30 @@ st.markdown(
         font-weight: 700; color: #5B8DEF; margin-bottom: 2px;
     }
 
+    /* Flat, Vercel-style cards: 1px border, no shadow, no accents. */
     .stat-tile {
-        background: #161A21; border: 1px solid rgba(255,255,255,0.08);
-        border-left: 4px solid var(--tier-color, #5B8DEF);
-        border-radius: 12px; padding: 14px 18px; height: 100%;
+        background: #0A0A0A; border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 8px; padding: 16px 18px; height: 100%;
+        transition: border-color 150ms ease;
     }
+    .stat-tile:hover { border-color: rgba(255,255,255,0.22); }
     .stat-tile .stat-label {
-        font-size: 0.8rem; color: rgba(255,255,255,0.62); font-weight: 500;
-        display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+        font-size: 0.8rem; color: rgba(255,255,255,0.60); font-weight: 400;
+        display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
     }
-    .stat-tile .stat-value { font-size: 1.9rem; font-weight: 800; line-height: 1; color: #E6E8EB; }
+    .stat-tile .stat-dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        background: var(--tier-color, #888);
+    }
+    .stat-tile .stat-value {
+        font-size: 1.75rem; font-weight: 500; line-height: 1; color: #EDEDED;
+        letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    }
+    .stat-tile .stat-value .stat-total {
+        font-size: 0.9rem; font-weight: 400; color: rgba(255,255,255,0.45);
+        letter-spacing: 0;
+    }
+    h1, h2, h3, h4 { font-weight: 500 !important; letter-spacing: -0.02em; }
 
     .map-legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 2px 0; }
     .map-legend .item { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; color: rgba(255,255,255,0.68); }
@@ -233,7 +247,7 @@ for col, tier_id in zip(kpi_cols, TIERS):
         st.markdown(
             f"""
             <div class="stat-tile" style="--tier-color:{tier['color']};">
-                <div class="stat-label">{TIER_ICON[tier_id]} {tier['name']}</div>
+                <div class="stat-label"><span class="stat-dot"></span>{tier['name']}</div>
                 <div class="stat-value">{count:,}</div>
             </div>
             """,
@@ -244,9 +258,9 @@ if HAS_SERVICES:
     st.write("")
     svc_cols = st.columns(3)
     svc_kpis = [
-        ("school", "🎓 No school within 10km"),
-        ("medical", "🩺 No medical facility within 10km"),
-        ("emergency", "🚨 No emergency facility within 10km"),
+        ("school", "No school within 10 km"),
+        ("medical", "No medical facility within 10 km"),
+        ("emergency", "No emergency facility within 10 km"),
     ]
     for col, (prefix, label) in zip(svc_cols, svc_kpis):
         n_col = "n_schools_10km" if prefix == "school" else f"n_{prefix}_10km"
@@ -255,8 +269,8 @@ if HAS_SERVICES:
             st.markdown(
                 f"""
                 <div class="stat-tile" style="--tier-color:{SERVICE_STYLE[prefix]['color']};">
-                    <div class="stat-label">{SERVICE_STYLE[prefix]['icon']} {label}</div>
-                    <div class="stat-value">{count:,} <span style="font-size:0.95rem; font-weight:500; color:rgba(255,255,255,0.5);">/ 792</span></div>
+                    <div class="stat-label"><span class="stat-dot"></span>{label}</div>
+                    <div class="stat-value">{count:,} <span class="stat-total">/&nbsp;792</span></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
