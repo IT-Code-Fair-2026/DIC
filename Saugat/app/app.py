@@ -394,9 +394,50 @@ try:
 except FileNotFoundError:
     small_cells = None
 
+PROVIDER_STYLE = {  # colour-blind-safe (Okabe-Ito); every band also has a text label
+    "Telstra only": "#0072B2",
+    "Optus only": "#E69F00",
+    "Other sole provider": "#CC79A7",
+    "Multiple providers": "#009E73",
+    "No tower within 10 km": "#6B6F76",
+}
+
+
+def attach_providers(df: pd.DataFrame, radius_km: float = 10.0) -> pd.DataFrame:
+    """Which network providers have a tower within `radius_km` of each community.
+
+    Uses `networks` from towers.csv (the operator that runs the network, so TPG
+    also covers Vodafone), the same definition as the notebook's `n_networks_10km`.
+    Straight-line distance to a licensed tower site: triage, not a coverage claim.
+    `sole_network` is set when exactly one provider is within reach, i.e. there
+    is no backup if it fails.
+    """
+    df = df.copy()
+    if towers is None:
+        df["networks_10km"] = [[] for _ in range(len(df))]
+    else:
+        p = np.pi / 180
+        lat, lon = df["latitude"].to_numpy()[:, None], df["longitude"].to_numpy()[:, None]
+        tlat, tlon = towers["latitude"].to_numpy()[None, :], towers["longitude"].to_numpy()[None, :]
+        a = np.sin((tlat - lat) * p / 2) ** 2 + np.cos(lat * p) * np.cos(tlat * p) * np.sin((tlon - lon) * p / 2) ** 2
+        near = (2 * 6371.0088 * np.arcsin(np.sqrt(a))) <= radius_km
+        tower_nets = [frozenset(str(n).split(";")) for n in towers["networks"]]
+        df["networks_10km"] = [sorted(set().union(*[tower_nets[j] for j in np.flatnonzero(row)])) for row in near]
+    n = df["networks_10km"].map(len)
+    df["sole_network"] = [nets[0] if len(nets) == 1 else None for nets in df["networks_10km"]]
+    df["providers_text"] = df["networks_10km"].map(lambda nets: ", ".join(nets) if nets else "None")
+    df["provider_class"] = [
+        "No tower within 10 km" if k == 0 else "Multiple providers" if k > 1
+        else {"Telstra": "Telstra only", "Optus": "Optus only"}.get(sole, "Other sole provider")
+        for k, sole in zip(n, df["sole_network"])
+    ]
+    return df
+
+
 data = prepare(raw)
 if sa1_report is not None:
     data = data.merge(sa1_report, on="sa1_code", how="left")
+data = attach_providers(data)
 
 HAS_SERVICES = all(c in data.columns for c in (
     "km_nearest_school", "km_nearest_medical", "km_nearest_emergency"
@@ -506,6 +547,13 @@ def nearby_section(v: pd.Series) -> None:
             f'<div class="near-name">{verdict}</div></div></div>',
             unsafe_allow_html=True,
         )
+    nets = list(v.get("networks_10km", []) or [])
+    if towers is not None:
+        note = "no backup if it fails" if len(nets) == 1 else "none within reach" if not nets else f"{len(nets)} providers"
+        st.markdown(
+            f'<div class="near-summary"><span class="n">{mi("cell_tower")}Providers within {NEARBY_KM} km: '
+            f'{", ".join(nets) if nets else "None"} ({note})</span></div>', unsafe_allow_html=True,
+        )
     st.markdown(f"**Nearby Within {NEARBY_KM} km**")
     summary = "".join(
         f'<span class="n" title="{KIND_STYLE[k]["label"]}">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])}'
@@ -535,7 +583,7 @@ def nearby_section(v: pd.Series) -> None:
 # ---------------------------------------------------------------------------
 
 COLOR_MODES = [
-    "Tier", "Tower distance", "Population",
+    "Tier", "Provider", "Tower distance", "Population",
     "School distance", "Medical distance", "Emergency distance",
 ]
 # Cool -> warm ramp reusing the tier hues; every band also has a text label.
@@ -566,6 +614,11 @@ def _band_labels(edges: list[int], unit: str) -> list[str]:
 
 def colour_dots(df: pd.DataFrame, mode: str):
     """Per-row dot colour + tooltip metric + legend entries for a colour mode."""
+    if mode == "Provider":
+        colours = df["provider_class"].map(PROVIDER_STYLE)
+        metric = df["provider_class"] + " (" + df["providers_text"] + ")"
+        return colours, metric, [(c, label) for label, c in PROVIDER_STYLE.items()]
+
     if mode == "Tier" or (mode in DIST_COL and DIST_COL[mode][0] not in df.columns):
         legend = [(t["color"], t["name"]) for t in TIERS.values()]
         return df["tier_color"], df["tier_name"], legend
@@ -630,6 +683,12 @@ with right_sheet:
         st.markdown(
             f'<div class="sheet-title">Services</div>{svc_rows}', unsafe_allow_html=True
         )
+    if towers is not None:
+        prov_rows = "".join(
+            stat_row(PROVIDER_STYLE[k], k, f"{int((data['provider_class'] == k).sum()):,}")
+            for k in PROVIDER_STYLE if (data["provider_class"] == k).any()
+        )
+        st.markdown(f'<div class="sheet-title">Provider Within 10 km</div>{prov_rows}', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -650,6 +709,7 @@ FILTER_DEFAULTS = {
     "no_school_filter": False, "no_medical_filter": False, "no_emergency_filter": False,
     "show_services_filter": False,
     "color_by": "Tier",
+    "provider_filter": [], "sole_filter": False,
 }
 
 
@@ -689,6 +749,15 @@ remote_filter = st.sidebar.multiselect(
     bind="query-params",
 )
 
+provider_options = sorted({n for nets in data["networks_10km"] for n in nets})
+provider_filter = st.sidebar.multiselect(
+    "Provider Within 10 km", options=provider_options, default=[], placeholder="All", key="provider_filter",
+    bind="query-params", disabled=not provider_options,
+)
+sole_only = st.sidebar.checkbox(
+    "Sole provider only (no backup)", key="sole_filter", bind="query-params", disabled=not provider_options,
+)
+
 min_tower = st.sidebar.slider(
     "Min Distance to Tower (km)", 0, 150, 0, key="min_tower_filter",
     bind="query-params",
@@ -703,7 +772,7 @@ with st.sidebar.expander("More Filters"):
     no_emergency = st.checkbox("No emergency facility within 10 km", key="no_emergency_filter", bind="query-params", disabled=not HAS_SERVICES)
 
 active_filters = sum([
-    bool(tier_filter), bool(type_filter), bool(remote_filter), min_tower > 0,
+    bool(tier_filter), bool(type_filter), bool(remote_filter), bool(provider_filter), sole_only, min_tower > 0,
     no_rict, guide_covered, in_nbn, no_school, no_medical, no_emergency,
 ])
 COPY_LINK_HTML = """
@@ -796,6 +865,14 @@ mask = (
     & data["remoteness_name"].isin(effective_remote)
     & (data["km_nearest_tower"] >= min_tower)
 )
+if provider_filter:
+    chosen = set(provider_filter)
+    if sole_only:  # the chosen provider is the ONLY one within reach: its failure leaves no service
+        mask &= data["sole_network"].isin(chosen)
+    else:
+        mask &= data["networks_10km"].map(lambda nets: bool(chosen.intersection(nets)))
+elif sole_only:
+    mask &= data["sole_network"].notna()
 if no_rict:
     mask &= ~data["has_rict_public_access"].fillna(False)
 if guide_covered:
@@ -1161,6 +1238,7 @@ with tab_table:
             "community_name": "Community", "community_type": "Type", "tier_name": "Tier",
             "remoteness_name": "Remoteness", "km_nearest_tower": "Nearest tower (km)",
             "n_towers_10km": "Towers within 10 km", "n_networks_10km": "Networks within 10 km",
+            "providers_text": "Providers within 10 km",
             "pop_census_2021": "SA1 population (2021)",
             "median_hh_income_weekly": "Median household income ($/wk)",
         }
@@ -1230,6 +1308,27 @@ with tab_insights:
             scale=alt.Scale(domain=TIER_ORDER, range=TIER_RANGE),
             legend=alt.Legend(orient="bottom", columns=1, labelLimit=260),
         )
+        if towers is not None:
+            counts = filtered["provider_class"].value_counts()
+            sole = filtered[filtered["sole_network"].notna()]
+            st.markdown("**Provider Dependence Within 10 km**")
+            if len(sole):
+                top = sole["sole_network"].value_counts()
+                st.caption(
+                    f"{int(top.iloc[0]):,} of {len(sole):,} single-provider communities depend on "
+                    f"{top.index[0]} alone: no backup if it fails."
+                )
+            prov = pd.DataFrame({"Group": list(PROVIDER_STYLE), "Communities": [int(counts.get(k, 0)) for k in PROVIDER_STYLE]})
+            st.altair_chart(
+                alt.Chart(prov).mark_bar().encode(
+                    y=alt.Y("Group:N", title=None, sort=None, axis=alt.Axis(labelLimit=260, labelOverlap=False)),
+                    x=alt.X("Communities:Q"),
+                    color=alt.Color("Group:N", legend=None, scale=alt.Scale(
+                        domain=list(PROVIDER_STYLE), range=list(PROVIDER_STYLE.values()))),
+                    tooltip=["Group:N", "Communities:Q"],
+                ).properties(height=200),
+                width="stretch",
+            )
         left, right = st.columns(2)
         with left:
             st.markdown("**Communities by Remoteness & Tier**")
