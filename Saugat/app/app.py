@@ -35,7 +35,7 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .block-container { padding-top: 3.75rem; padding-bottom: 1.5rem; }
 
@@ -107,6 +107,7 @@ st.markdown(
         font-size: 1.05em; line-height: 1; vertical-align: -0.18em; letter-spacing: normal;
         text-transform: none; white-space: nowrap; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
     }
+    .mi.fill { font-variation-settings: 'FILL' 1; }
     .near-summary { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
     .near-summary .n { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
     .near-summary_ { font-size: 0.85rem; color: rgba(255,255,255,0.70); margin: 2px 0 8px 0; }
@@ -784,6 +785,7 @@ with map_col:
         )
     _picked_now = st.session_state.get("picked_card_id")
     if _picked_now is not None and (data["community_id"] == _picked_now).any():
+        legend_html += '<span class="item"><span class="mi fill" style="color:#FFFFFF;">location_on</span> Selected community</span>'
         legend_html += "".join(
             f'<span class="item">{mi(KIND_STYLE[k]["icon"], KIND_STYLE[k]["color"])} {KIND_STYLE[k]["one"]}</span>' for k in NEARBY_ORDER
         ) + f'<span class="item">Dashed: nearest of each kind · circle: {NEARBY_KM} km</span>'
@@ -811,10 +813,13 @@ with map_col:
             color="#EDEDED", weight=1, dash_array="4 6", fill=True, fill_color="#EDEDED", fill_opacity=0.05,
         ).add_to(m)
     m.get_root().header.add_child(folium.Element(
-        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block">'
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block">'
         '<style>.mi{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:15px;'
         'line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;font-feature-settings:"liga";'
-        '-webkit-font-smoothing:antialiased}</style>'
+        '-webkit-font-smoothing:antialiased}.mi.fill{font-variation-settings:"FILL" 1}'
+        '.astra-pin-label{background:#0A0A0A;color:#fff;border:1px solid rgba(255,255,255,.65);border-radius:6px;'
+        'font:600 12px Inter,system-ui,sans-serif;padding:3px 8px;box-shadow:none}'
+        '.astra-pin-label:before{display:none}</style>'
     ))
     m.get_root().header.add_child(folium.Element(
         "<style>.leaflet-tile-pane "
@@ -884,13 +889,25 @@ with map_col:
                 color=st_["color"], weight=2, opacity=0.9, dash_array="6 6",
                 tooltip=f"Nearest {st_['one'].lower()} · {it['name']} · {it['km']:.1f} km",
             ).add_to(m)
-        folium.CircleMarker([clat, clon], radius=11, color="#EDEDED", weight=2, fill=False).add_to(m)
+        # The community itself: a large white pin with its name always visible, so it
+        # cannot be confused with the tower/service icons around it.
+        folium.Marker(
+            [clat, clon],
+            icon=folium.DivIcon(
+                html=('<span class="mi fill" style="font-size:40px;color:#FFFFFF;'
+                      'text-shadow:0 0 5px #000,0 0 2px #000;">location_on</span>'),
+                icon_size=(40, 40), icon_anchor=(20, 38),
+            ),
+            tooltip=folium.Tooltip(str(focus["community_name"]), permanent=True, direction="right",
+                                   offset=(16, -22), class_name="astra-pin-label"),
+            z_index_offset=1000,
+        ).add_to(m)
 
     map_state = st_folium(
         m, height=560, use_container_width=True,
         returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
         # Key changes with the filtered set so the map redraws when filters change.
-        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{focus_id}_{st.session_state.get('map_epoch', 0)}",
+        key=f"deadzone_map_{pd.util.hash_pandas_object(filtered['community_id'], index=False).sum()}_{show_services_layer}_{color_mode}_{focus_id}_{st.session_state.get('locate_nonce', 0)}_{st.session_state.get('map_epoch', 0)}",
     )
     clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
@@ -959,7 +976,12 @@ def community_summary(v: pd.Series) -> str:
 def render_detail(v: pd.Series, cols: int = 4) -> None:
     """Full reasoning + raw stats for one community. Shared by the points
     list and the lookup section below so both show identical detail."""
-    st.markdown(f"#### {v['community_name']}")
+    name_col, locate_col = st.columns([3, 2], vertical_alignment="center")
+    name_col.markdown(f"#### {v['community_name']}")
+    if locate_col.button("Locate", key="locate_btn", icon=":material/my_location:", width="stretch"):
+        # New map key => the map re-centres on this community even after panning/zooming away.
+        st.session_state["locate_nonce"] = st.session_state.get("locate_nonce", 0) + 1
+        st.rerun()
     st.markdown(
         f"<span style='background:{v['tier_color']}22; color:{v['tier_color']}; "
         f"padding:4px 12px; border-radius:16px;'>{v['tier_name']}</span>",
