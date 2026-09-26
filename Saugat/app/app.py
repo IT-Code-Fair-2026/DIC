@@ -374,7 +374,7 @@ map_col, points_col = st.columns([2, 1])
 
 with map_col:
     st.subheader("Map")
-    st.caption("Click a dot — its card opens automatically on the right.")
+    st.caption("Click a dot — its details appear on the right.")
     legend_html = "".join(
         f'<span class="item"><span class="swatch" style="background:{t["color"]}"></span>{t["name"]}</span>'
         for t in TIERS.values()
@@ -428,15 +428,28 @@ with map_col:
 
     map_state = st_folium(
         m, height=560, use_container_width=True,
-        returned_objects=["last_object_clicked_tooltip"],
+        returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
+        key="deadzone_map",
     )
+    clicked = (map_state or {}).get("last_object_clicked")
     current_tooltip = (map_state or {}).get("last_object_clicked_tooltip")
-    if current_tooltip != st.session_state.get("_last_map_tooltip"):
-        clicked_id = tooltip_to_id.get(current_tooltip)
+    click_sig = (
+        (round(clicked["lat"], 6), round(clicked["lng"], 6), current_tooltip)
+        if clicked else None
+    )
+    if click_sig and click_sig != st.session_state.get("_last_map_click"):
+        clicked_id = None
+        # Prefer the marker whose coordinates match the click (nearest village);
+        # fall back to the tooltip text.
+        d2 = (filtered["latitude"] - clicked["lat"]) ** 2 + (filtered["longitude"] - clicked["lng"]) ** 2
+        if len(d2) and d2.min() < 1e-6:
+            clicked_id = filtered.loc[d2.idxmin(), "community_id"]
+        else:
+            clicked_id = tooltip_to_id.get(current_tooltip)
         if clicked_id:
             st.session_state["picked_card_id"] = clicked_id
-            st.session_state[f"card_{clicked_id}"] = True
-    st.session_state["_last_map_tooltip"] = current_tooltip
+    if click_sig:
+        st.session_state["_last_map_click"] = click_sig
 
 
 def render_detail(v: pd.Series, cols: int = 4) -> None:
@@ -512,26 +525,10 @@ def render_detail(v: pd.Series, cols: int = 4) -> None:
 
 
 with points_col:
-    st.subheader("Points")
-    st.caption("Sorted by category, then by real tower distance. Click any card to expand it.")
-    ranked = filtered.sort_values(
-        ["tier_rank", "km_nearest_tower"], ascending=[True, False]
-    ).head(150)
-
     picked_card_id = st.session_state.get("picked_card_id")
-    for _, v in ranked.iterrows():
-        label = (
-            f"{TIER_ICON[v['tier_id']]} **{v['community_name']}** — "
-            f"{v['km_nearest_tower']:.1f} km · {v['tier_name']}"
-        )
-        with st.expander(
-            label,
-            expanded=v["community_id"] == picked_card_id,
-        ):
-            render_detail(v, cols=2)
-
-    if len(filtered) > 150:
-        st.caption(f"Showing top 150 of {len(filtered)}.")
+    picked = data[data["community_id"] == picked_card_id]
+    if not picked.empty:
+        render_detail(picked.iloc[0], cols=2)
 
 # ---------------------------------------------------------------------------
 # Detail expander for a selected community
