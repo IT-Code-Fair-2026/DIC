@@ -1,6 +1,0 @@
-streamlit>=1.64
-pandas>=2.0
-numpy>=1.26
-altair>=5.0
-folium>=0.16
-streamlit-folium>=0.20

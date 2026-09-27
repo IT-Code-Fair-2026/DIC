@@ -1,0 +1,24 @@
+# Python 3.12. Exact versions so every run produces the same outputs.
+# Install with:  pip install -r requirements.txt
+
+# Data pipeline (notebooks/)
+pandas==2.3.1
+numpy==2.2.4
+geopandas==1.1.4
+shapely==2.1.0
+pyogrio==0.13.0
+pyproj==3.7.2
+scipy==1.15.2
+openpyxl==3.1.5
+matplotlib==3.10.9
+
+# Running the notebooks (run_pipeline.py / Jupyter)
+nbformat==5.10.4
+nbconvert==7.17.1
+ipykernel==7.2.0
+
+# Dashboard (app/)
+streamlit==1.64.0
+altair==6.3.0
+folium==0.20.0
+streamlit-folium==0.27.4

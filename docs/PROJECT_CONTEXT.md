@@ -38,7 +38,9 @@ Link: https://itcodefair.cdu.edu.au/data-innovation-challenge/
 ```
 data/raw/            supplied by CDU, read-only
 data/external/       downloaded by us, read-only
-data/new_processed/  written by the notebooks (README still says data/processed/)
+data/processed/      written by the notebooks (was data/new_processed/ until 2026-09-27)
+notebooks/           00a … 11, run in order by run_pipeline.py
+app/                 Streamlit dashboard, reads data/processed/
 docs/                DATASET_INVENTORY.md, DATA_DICTIONARY.md/.pdf (to be built by Claude Code)
 connecitivity_analysis.ipynb            -> mobile_sites, community_connectivity_priority
 population_distribution_analsis.ipynb   -> villages_with_areas, sa1_report(.csv/.geojson)
@@ -78,7 +80,7 @@ CRS: ABS = EPSG:7844, NBN = EPSG:4283, JSON/KML = 4326; all ≈ equal at sub-met
 
 ---
 
-## 5. Processed outputs (`data/new_processed/`)
+## 5. Processed outputs (`data/processed/`)
 
 ### `villages_with_areas.csv` / `.geojson` — 792 rows × 21 cols ✅ fixed 2026-09-05
 `community_id, community_name, community_aliases, community_type, latitude, longitude, land_council, local_govt_council, ntg_region, ward, electorate, main_language, bushtel_url, population_bushtel_2024, population_bushtel_source, sa1_code, sa2_name, iloc_code, iloc_name, pop_census_2021, n_villages_in_sa1`
@@ -98,7 +100,7 @@ CRS: ABS = EPSG:7844, NBN = EPSG:4283, JSON/KML = 4326; all ≈ equal at sub-met
 - GeoJSON version = polygons joined to report; use this in kepler, not the bare `sa1_boundaries.geojson`.
 
 **Rebuild (v2, `notebooks/02_sa1_report.ipynb` → `sa1_report.csv`):**
-- **Decision (revised 2026-09-06):** **keep all 649 rows**, merge polygons with `validate="1:1"`. Add boolean **`census_pop_suppressed = Tot_P_P < 5`** (34 rows True). Still write those 34 rows to `data/new_processed/area_with_population_lessthan_5.csv` as a side list. Set `Median_tot_hhd_inc_weekly` and `Average_household_size` **`0 → NaN`** (ABS suppression, 34 / 33 rows).
+- **Decision (revised 2026-09-06):** **keep all 649 rows**, merge polygons with `validate="1:1"`. Add boolean **`census_pop_suppressed = Tot_P_P < 5`** (34 rows True). Still write those 34 rows to `data/processed/area_with_population_lessthan_5.csv` as a side list. Set `Median_tot_hhd_inc_weekly` and `Average_household_size` **`0 → NaN`** (ABS suppression, 34 / 33 rows).
 - Reason the drop was reversed: **30 inhabited BushTel outstations sit in 4 of the suppressed (`Tot_P_P == 0`) SA1s** — Tanami `70201105311` (8), Yuendumu-Anmatjere `70201105402` (11), Gulf `70205106609` (10), Sandover-Plenty `70201105205` (1). Dropping the SA1 would strand them with no population reference. Their SA1's `sa1_report` row has `pop_census_2021 = 0` and `census_pop_suppressed = True`.
 - **`villages.csv` does not carry a census population column** — population lives only on `sa1_report` (SA1 is the unit for population, §2). villages.csv carries `sa1_code` / `sa2_name` / `remoteness_name` / `is_remote` / `n_villages_in_sa1`; population is joined at SA1 level in nb 07.
 - `is_remote` (bool) = `remoteness_name` in {Remote, Very Remote} → `True`; Outer Regional → `False`. 779 of 792 villages are `True`.

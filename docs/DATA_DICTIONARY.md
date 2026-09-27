@@ -8,7 +8,7 @@ shapefile `.dbf` headers, and the actual read/write/transform code in
 notebook only reads a subset of a table's columns, that subset is noted.
 
 Datasets are grouped as **inputs** (raw/external, read only) and **current-pipeline
-outputs** (`data/new_processed/`, written by the two notebooks).
+outputs** (`data/processed/`, written by the two notebooks).
 
 ---
 
@@ -289,13 +289,13 @@ Shapefile, 505,615 polygon records. NBN fixed-wireless technology footprint. CRS
 
 ---
 
-## Current-pipeline outputs (`data/new_processed/`)
+## Current-pipeline outputs (`data/processed/`)
 
-### `new_processed/mobile_sites.csv` / `.geojson`
+### `processed/mobile_sites.csv` / `.geojson`
 695 rows/features, WGS84 points. Combined mobile-site inventory from three sources (ACMA
 carrier towers + NT coverage guide + MBSP funded sites), written by
 `connecitivity_analysis.ipynb`. Column descriptions are the notebook's own `column_notes`
-(also saved to `new_processed/03_mobile_sites.columns.md`):
+(also saved to `processed/03_mobile_sites.columns.md`):
 
 | Column | Description |
 |---|---|
@@ -313,7 +313,7 @@ carrier towers + NT coverage guide + MBSP funded sites), written by
 
 ---
 
-### `new_processed/community_connectivity_priority.csv`
+### `processed/community_connectivity_priority.csv`
 188 rows — one per NT coverage-guide site (`source == "guide"` rows from `mobile_sites`),
 sorted by `likely_gap` then `population` descending. Written by `connecitivity_analysis.ipynb`.
 
@@ -334,7 +334,7 @@ sorted by `likely_gap` then `population` descending. Written by `connecitivity_a
 
 ---
 
-### `new_processed/sa1_boundaries.geojson`
+### `processed/sa1_boundaries.geojson`
 649 polygon features, one per NT SA1. Reprojected to WGS84 (CRS84) for the GeoJSON.
 Written by `population_distribution_analsis.ipynb`.
 
@@ -345,7 +345,7 @@ Written by `population_distribution_analsis.ipynb`.
 
 ---
 
-### `new_processed/villages_with_areas.csv` / `.geojson`
+### `processed/villages_with_areas.csv` / `.geojson`
 793 rows/features, WGS84 points — the 792 BushTel communities (one duplicate id noted in
 the row count), each tagged with its containing SA1/ILOC area and that SA1's Census
 population. Written by `population_distribution_analsis.ipynb`.
@@ -370,6 +370,6 @@ population. Written by `population_distribution_analsis.ipynb`.
   was deliberately left unticked even though the notebook currently reads it too (to link a
   licence's `CLIENT_NO` to a carrier name via `LICENCEE`); flag if that link should be added
   back in.
-- `data/processed/` (old pipeline) and the un-selected `data/new_processed/communities.*` /
+- The old pipeline's outputs and the un-selected `communities.*` /
   `sa1_report.*` files are not documented here — see `docs/DATASET_INVENTORY.md` for why each
   is marked unused/stale.
