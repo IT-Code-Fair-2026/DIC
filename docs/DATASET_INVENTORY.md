@@ -1,86 +1,75 @@
 # Dataset inventory
-Tick [x] every dataset you want documented in the data dictionary.
-Leave [ ] for datasets to skip in phase one.
+
+Reflects the `data/` tree as of **2026-09-27**, after removing every file that no notebook
+in `notebooks/` (00a–06) and no other script in the repo actually reads. The audit behind
+the `used`/`unused` calls below is `docs/data_use_check.md` — every notebook cell read line
+by line, plus a repo-wide grep for any non-notebook consumer (which is how
+`remote-small-cell-coverage-nt.xlsx` was caught as used by `Saugat/services/build_small_cells.py`
+even though no notebook touches it). `[x]` = used, `[ ]` = not used / not present.
 
 ## data/raw
-- [x] `raw/bushtel/Com_BushTel_Profile_CMC_2024.json` — JSON, 485.7 KB, 792 features — used — BushTel Community Profile 2024, master list of ~792 NT communities (id, name, lat/long, type, land council, region, electorate, partial population).
-- [x] `raw/census_gcp_2021/2021_GCP_all_for_NT_short-header/` — folder of 1,904 CSVs (16 geography levels × 119 tables G01–G62 each), 60 MB total — used — 2021 Census General Community Profile DataPack, NT, short-header CSV; SA1 level (649 in NT) is the one read.
-- [x] `raw/nt_mobile_coverage/mobile-coverage-all-sites.xlsx` — XLSX, 24.0 KB, 192 rows (1 sheet) — used — National Mobile Coverage guide, all listed mobile sites ("GUIDE only" spreadsheet, ~188 NT rows).
-- [ ] `raw/nt_mobile_coverage/remote-small-cell-coverage-nt.xlsx` — XLSX, 13.3 KB, 25 rows (1 sheet) — unused — Remote sites with mobile-phone small-cell coverage, NT.
-- [ ] `raw/rict/Com_RICT_Community_NIAA_2024.json` — JSON, 164.1 KB, 535 features — unused — Remote Indigenous Communications (RICT) community list, NIAA, with service indicators.
+- [x] `raw/bushtel/Com_BushTel_Profile_CMC_2024.json` — JSON, 488K, 792 features — used by `00a`, `01`, `04` — BushTel Community Profile 2024, master list of ~792 NT communities (id, name, lat/long, type, land council, region, electorate, partial population).
+- [x] `raw/census_gcp_2021/2021_GCP_all_for_NT_short-header/` — **trimmed 2026-09-27**: was 1,904 CSVs (16 geography levels × up to 119 tables), 60 MB; now 2 CSVs, 228 KB — used by `00a`, `02` — 2021 Census General Community Profile DataPack, NT, short-header CSV. Only `SA1/NT/2021Census_G01_NT_SA1.csv` (649 rows, `Tot_P_P` column) and `2021Census_G02_NT_SA1.csv` (649 rows, `Median_tot_hhd_inc_weekly` + `Average_household_size`) are read. The DataPack's own `Metadata/` and `Readme/` folders are kept alongside (documentation, not data).
+- [x] `raw/nt_mobile_coverage/mobile-coverage-all-sites.xlsx` — XLSX, 28K, 193 rows (1 sheet) — used by `00b`, `05` — National Mobile Coverage guide, all listed mobile sites ("GUIDE only" spreadsheet, 188 NT rows after the header-row hunt).
+- [x] `raw/nt_mobile_coverage/remote-small-cell-coverage-nt.xlsx` — XLSX, 16K — used, but **not by any notebook** — read directly by `Saugat/services/build_small_cells.py`, which writes `Saugat/app/small_cells.csv`.
+- [x] `raw/rict/Com_RICT_Community_NIAA_2024.json` — JSON, 168K, 535 features — used by `00b`, `05` — Remote Indigenous Communications (RICT) community list, NIAA, with service indicators. 296 of 535 are NT (`state == "NT"`).
 
-## data/external (committed)
-- [x] `external/mbsp/MBSP - Round {1,2,3,4,5,5A,6,7} Funded Base Stations.kml` — 8 KMLs, 5.9 MB total, 2,710 placemarks — used — Mobile Black Spot Program funded base stations, one KML per funding round.
-- [ ] `external/mnhp/` — empty (placeholder `.gitkeep` only, no data acquired) — unused — Mobile Network Hardening Program sites; flagged in data/README.md as not yet acquired.
-- [ ] `external/pump/` — empty (placeholder `.gitkeep` only, no data acquired) — unused — undefined dataset ("pump"); flagged in data/README.md as needing clarification.
-- [ ] `external/services/_raw/ga_gp_nt.geojson` — GeoJSON, 74.5 KB, 128 features — unused — GA/NHSD general practices & community health centres, NT.
-- [ ] `external/services/_raw/ga_hospitals_nt.geojson` — GeoJSON, 6.4 KB, 11 features — unused — GA/NHSD hospitals, NT (11 raw, dedupes to 8 downstream).
-- [ ] `external/services/_raw/ga_police_nt.geojson` — GeoJSON, 74.5 KB, 66 features — unused — GA Emergency Management Facilities, police stations/shopfronts, NT.
-- [ ] `external/stand/strengthening_telecommunication_against_natural_disaster.json` — JSON, 390.4 KB, 1,255 features — unused — STAND (Strengthening Telecommunications Against Natural Disasters) program sites, national GeoJSON FeatureCollection of points.
+## data/external (kept)
+- [x] `external/mbsp/MBSP - Round {1,2,3,4,5,5A,6,7} Funded Base Stations.kml` — 8 KMLs, 6.0M total, 2,710 placemarks — used by `00b`, `05` — Mobile Black Spot Program funded base stations, one KML per funding round; 49 NT sites survive dedupe on `MBSP_ID`.
+- [x] `external/abs_boundaries/SA1_2021_AUST_GDA2020_SHP/` — shapefile, 147M (.shp), 61,845 polygons national — used by `00a`, `01`, `02` — ABS ASGS 2021 SA1 boundary shapefile; 649 read for NT via a GDAL `WHERE` clause at read time.
+- [x] `external/abs_boundaries/RA_2021_AUST.xlsx` — XLSX, 3.1M, 61,845 rows (1 sheet) — used by `00a`, `01`, `02` — ABS Remoteness Area 2021 correspondence/allocation workbook (SA1 → RA lookup); 649 NT rows kept in-frame.
+- [x] `external/acma_rrl/` — **trimmed 2026-09-27**: was 24 CSVs, 573M total; now 4 CSVs, 401M — used by `00b`, `03` — ACMA Register of Radiocommunications Licences, daily national full extract.
+  - [x] `site.csv` — 13M, 129,492 rows — used (3,771 `STATE == 'NT'`)
+  - [x] `licence.csv` — 20M, 164,205 rows — used (3 columns: `LICENCE_NO`, `CLIENT_NO`, `LICENCE_CATEGORY_NAME`)
+  - [x] `client.csv` — 1.7M, 14,332 rows — used (2 columns: `CLIENT_NO`, `LICENCEE`)
+  - [x] `device_details.csv` — 367M, 2,154,999 rows — used (read in 200k-row chunks, filtered to NT site ids → 26,767 rows kept)
+  - kept regardless of table trimming (licence terms / schema docs, not data): `LICENCE.TXT`, `LICENCE.PDF`, `README.TXT`, `DOC/` (ERD, Oracle DDL, format-summary xlsx)
+- [x] `external/nbn/fixedline/nbn_coverage_fixedline.shp` — shapefile, 14M, 35 polygons in the NT bbox — used by `00b`, `04` — NBN fixed-line technology footprint polygons.
+- [x] `external/nbn/wireless/nbn_coverage_wireless.shp` — shapefile, 624M, 348 polygons in the NT bbox — used by `00b`, `04` — NBN fixed-wireless technology footprint polygons (Darwin/Tiwi only).
 
-## data/external (git-ignored, on disk)
-- [ ] `external/abs_boundaries/ILOC_2021_AUST_GDA2020_SHP/` — shapefile, 56.9 MB, 1,139 records — **parked — dropped 2026-09-06, no unique signal** (SA1 already tags every village with a region; ILOC added an overlapping second one). Not read by any v2 notebook. Safe to delete; left on disk for now. (national; 189 in NT).
-- [x] `external/abs_boundaries/RA_2021_AUST.xlsx` — XLSX, 3.1 MB, 61,845 rows (1 sheet) — used — ABS Remoteness Area 2021 correspondence/allocation workbook (SA1 → RA lookup).
-- [ ] `external/abs_boundaries/RA_2021_AUST_GDA2020/` — shapefile, 38.8 MB, 54 records — unused — ABS ASGS 2021 Remoteness Area boundary shapefile (national; 5 in NT).
-- [x] `external/abs_boundaries/SA1_2021_AUST_GDA2020_SHP/` — shapefile, 184.7 MB, 61,845 records — used — ABS ASGS 2021 SA1 boundary shapefile (national; 649 in NT).
-- [ ] `external/abs_boundaries/SAL_2021_AUST_GDA2020_SHP/` — shapefile, 143.3 MB, 15,353 records — unused — ABS ASGS 2021 Suburbs & Localities boundary shapefile (national; 305 in NT).
-- [x] `external/acma_rrl/` — folder of 24 CSVs, 572.7 MB total — used (4 of 24 files) — ACMA Register of Radiocommunications Licences, daily national full extract.
-  - [] `access_area.csv` — 836 B, 27 rows
-  - [] `antenna.csv` — 606.7 KB, 8,658 rows
-  - [] `antenna_pattern.csv` — 2.2 MB, 110,271 rows
-  - [] `antenna_polarity.csv` — 293 B, 11 rows
-  - [] `applic_text_block.csv` — 166.9 MB, 461,102 rows
-  - [] `auth_spectrum_area.csv` — 1.5 MB, 3,506 rows
-  - [] `auth_spectrum_freq.csv` — 209.4 KB, 3,542 rows
-  - [] `bsl.csv` — 203.6 KB, 3,654 rows
-  - [] `bsl_area.csv` — 10.8 KB, 560 rows
-  - [] `class_of_station.csv` — 447 B, 12 rows
-  - [] `client.csv` — 1.6 MB, 14,331 rows — used
-  - [] `client_type.csv` — 161 B, 6 rows
-  - [x] `device_details.csv` — 366.5 MB, 2,154,998 rows — used (size/rows only, never loaded fully)
-  - [] `fee_status.csv` — 63 B, 2 rows
-  - [] `industry_cat.csv` — 650 B, 14 rows
-  - [x] `licence.csv` — 19.7 MB, 164,204 rows — used
-  - [] `licence_service.csv` — 492 B, 27 rows
-  - [] `licence_status.csv` — 330 B, 18 rows
-  - [] `licence_subservice.csv` — 3.8 KB, 123 rows
-  - [] `licensing_area.csv` — 129 B, 4 rows
-  - [] `nature_of_service.csv` — 901 B, 15 rows
-  - [] `reports_text_block.csv` — 171.6 KB, 529 rows
-  - [] `satellite.csv` — 4.0 KB, 146 rows
-  - [x] `site.csv` — 13.0 MB, 129,491 rows — used
-- [x] `external/nbn/fixedline/nbn_coverage_fixedline.shp` — shapefile, 14.0 MB, 5,316 records — unused — NBN fixed-line technology footprint polygons.
-- [x] `external/nbn/wireless/nbn_coverage_wireless.shp` — shapefile, 636.1 MB, 505,615 records — unused — NBN fixed-wireless technology footprint polygons.
+## Removed 2026-09-27 (confirmed unused by every notebook and every other script in the repo)
 
-## data/processed  (old pipeline)
-- [ ] `processed/01_communities.csv` — CSV, 188.7 KB, 793 rows — unused — old-pipeline output, village table (communities).
-- [ ] `processed/01_communities.geojson` — GeoJSON, 494.0 KB, 792 features — unused — old-pipeline output, village table as points.
-- [ ] `processed/02_sa1_boundaries.geojson` — GeoJSON, 4.8 MB, 649 features — unused — old-pipeline output, NT SA1 polygons.
-- [ ] `processed/02_sa1_report.csv` — CSV, 86.3 KB, 649 rows — unused — old-pipeline output, SA1-level report.
-- [ ] `processed/02_villages_with_areas.csv` — CSV, 232.7 KB, 793 rows — unused — old-pipeline output, villages tagged with SA1/ILOC/RA area codes.
-- [ ] `processed/02_villages_with_areas.geojson` — GeoJSON, 586.1 KB, 792 features — unused — old-pipeline output, same as above as points.
-- [ ] `processed/03_mobile_sites.csv` — CSV, 75.7 KB, 695 rows — unused — old-pipeline output, combined mobile site inventory (ACMA + NT guide + MBSP).
-- [ ] `processed/03_mobile_sites.geojson` — GeoJSON, 288.4 KB, 695 features — unused — old-pipeline output, same as above as points.
-- [ ] `processed/04_nbn_footprint.geojson` — GeoJSON, 859.6 KB, 2 features — unused — old-pipeline output, NBN fixed-line/wireless footprint (dissolved).
-- [ ] `processed/04_public_access.csv` — CSV, 23.4 KB, 384 rows — unused — old-pipeline output, RICT + STAND public-access points.
-- [ ] `processed/04_public_access.geojson` — GeoJSON, 84.4 KB, 384 features — unused — old-pipeline output, same as above as points.
+Each path below was fully removed and replaced with a `.gitkeep` placeholder so the
+directory still exists; re-download from the URL in `data/README.md` if needed again.
 
-## data/new_processed  (current pipeline)
-- [ ] `new_processed/communities.csv` — CSV, 188.7 KB, 793 rows — unused — not read or written under this name by either notebook (stale copy of `01_communities.csv`).
-- [ ] `new_processed/communities.geojson` — GeoJSON, 494.0 KB, 792 features — unused — not read or written under this name by either notebook (stale copy of `01_communities.geojson`).
-- [x] `new_processed/community_connectivity_priority.csv` — CSV, 18.4 KB, 188 rows — used (written) — connectivity-priority shortlist (nearest MBSP gap etc.), written by `connecitivity_analysis.ipynb`.
-- [x] `new_processed/mobile_sites.csv` — CSV, 76.4 KB, 695 rows — used (written) — combined mobile site inventory, written by `connecitivity_analysis.ipynb`.
-- [x] `new_processed/mobile_sites.geojson` — GeoJSON, 301.7 KB, 695 features — used (written) — same as above as points, written by `connecitivity_analysis.ipynb`.
-- [x] `new_processed/sa1_boundaries.geojson` — GeoJSON, 4.8 MB, 649 features — used (written) — NT SA1 polygons, written by `population_distribution_analsis.ipynb`.
-- [ ] `new_processed/sa1_report.csv` — CSV, 78.2 KB, 649 rows — unused — write call is commented out in `population_distribution_analsis.ipynb`; file on disk is stale.
-- [ ] `new_processed/sa1_report.geojson` — GeoJSON, 4.9 MB, 645 features — unused — not read or written by either notebook.
-- [x] `new_processed/villages_with_areas.csv` — CSV, 237.8 KB, 793 rows — used (written) — villages tagged with SA1/ILOC/RA codes, written by `population_distribution_analsis.ipynb`.
-- [x] `new_processed/villages_with_areas.geojson` — GeoJSON, 623.5 KB, 792 features — used (written) — same as above as points, written by `population_distribution_analsis.ipynb`.
+- `external/stand/strengthening_telecommunication_against_natural_disaster.json` — JSON, 390K, 1,255 features — STAND program sites, national. Both `00b` and `05` state in their own output cells that STAND is deliberately dropped ("no unique signal").
+- `external/services/_raw/ga_gp_nt.geojson` — GeoJSON, 75K, 128 features — GA/NHSD general practices & community health centres, NT.
+- `external/services/_raw/ga_hospitals_nt.geojson` — GeoJSON, 6.4K, 11 features — GA/NHSD hospitals, NT.
+- `external/services/_raw/ga_police_nt.geojson` — GeoJSON, 75K, 66 features — GA Emergency Management Facilities, police stations/shopfronts, NT.
+  - None of the three above were ever read by any script. `external/services/README.md` (kept) describes a `src/05_load_services.py` consumer that was never built in this repo; the services layer that does exist (`Saugat/services/`) was built independently from a different set of source files.
+- `external/abs_boundaries/SAL_2021_AUST_GDA2020_SHP/` — shapefile, 143M, 15,353 records national — ABS ASGS 2021 Suburbs & Localities boundary shapefile. Never referenced.
+- `external/acma_rrl/` — 20 of 24 CSVs, ~172M: `access_area.csv`, `antenna.csv`, `antenna_pattern.csv`, `antenna_polarity.csv`, `applic_text_block.csv` (167M — the single largest removed file), `auth_spectrum_area.csv`, `auth_spectrum_freq.csv`, `bsl.csv`, `bsl_area.csv`, `class_of_station.csv`, `client_type.csv`, `fee_status.csv`, `industry_cat.csv`, `licence_service.csv`, `licence_status.csv`, `licence_subservice.csv`, `licensing_area.csv`, `nature_of_service.csv`, `reports_text_block.csv`, `satellite.csv`.
+- `raw/census_gcp_2021/…/{CED,GCCSA,LGA,POA,RA,SA2,SA3,SA4,SAL,SED,SOS,SOSR,STE,SUA,UCL}/` — 14 of 16 geography levels, 1,902 of 1,904 Census GCP CSVs, ~60M. Only `SA1/NT/2021Census_G01_NT_SA1.csv` and `G02` are read (see `data/raw` above).
 
-## Other data-like folders found (outside the requested list)
-- [ ] `work/communities_v0.csv` — CSV, 94.1 KB, 792 rows — unused — earlier v0 tiering script's output, no description available (no README).
+## Empty placeholders (unchanged — no data ever acquired)
+- [ ] `external/mnhp/` — `.gitkeep` only — Mobile Network Hardening Program sites; flagged in `data/README.md` as not yet acquired, not read by any notebook.
+- [ ] `external/pump/` — `.gitkeep` only — undefined dataset ("pump"); flagged in `data/README.md` as needing clarification.
 
-## Not found on disk (listed in README but missing)
-- `external/census_ip_2021/` — gitignored placeholder path (`.gitignore` line `/data/external/census_ip_2021/*`); no folder present on disk.
-- `raw/2021_IP_all_for_NT_short-header/` — 2021 Census Aboriginal & Torres Strait Islander Peoples Profile DataPack, NT (per `data/README.md`); not present on disk.
-- `raw/school_data.xlsx` — ACARA Australian Schools List, NT export (per `data/README.md`, meant to be read by `05_load_services.py`); not present on disk.
+## Missing but still referenced by a notebook
+- `external/abs_boundaries/ILOC_2021_AUST_GDA2020_SHP/` — ABS ASGS 2021 Indigenous Location boundary shapefile (1,139 records national, 189 in NT). **Read by `00a_eda_population_census.ipynb` (EDA only — no output column depends on it), but absent from the working tree** — every file under this path shows deleted in `git status` on this branch, from before the 2026-09-27 cleanup. `00a` cannot currently run past its second cell. See `docs/data_use_check.md` §5.1.
+- `external/abs_boundaries/RA_2021_AUST_GDA2020/` — ABS ASGS 2021 Remoteness Area boundary *shapefile* (distinct from `RA_2021_AUST.xlsx`, which is present and used). Not read by any notebook, and was already absent from the working tree before this cleanup.
+
+## data/new_processed (current pipeline — the only folder any notebook writes to)
+- [x] `new_processed/villages.csv` — CSV, 216K, 792 rows — written by `01_villages.ipynb`; read by `02_sa1_report.ipynb`.
+- [x] `new_processed/villages.geojson` — GeoJSON, 604K, 792 features — written by `01_villages.ipynb`; read by `06_village_gap.ipynb`.
+- [x] `new_processed/sa1_report.csv` — CSV, 84K, 649 rows — written by `02_sa1_report.ipynb`.
+- [x] `new_processed/sa1_report.geojson` — GeoJSON, 5.0M, 645 features (4 null-geometry SA1s excluded) — written by `02_sa1_report.ipynb`.
+- [x] `new_processed/area_with_population_lessthan_5.csv` — CSV, 8.0K, 34 rows — written by `02_sa1_report.ipynb` (ABS-suppressed small-count SA1s).
+- [x] `new_processed/towers.csv` — CSV, 64K, 431 rows — written by `03_towers.ipynb`; read by `06_village_gap.ipynb`.
+- [x] `new_processed/towers.geojson` — GeoJSON, 216K, 431 features — written by `03_towers.ipynb`.
+- [x] `new_processed/nbn_footprint.geojson` — GeoJSON, 860K, 2 features — written by `04_nbn_footprint.ipynb`; read by `06_village_gap.ipynb`.
+- [x] `new_processed/program_sites.csv` — CSV, 40K, 533 rows — written by `05_program_sites.ipynb`; read by `06_village_gap.ipynb`.
+- [x] `new_processed/program_sites.geojson` — GeoJSON, 236K, 533 features — written by `05_program_sites.ipynb`.
+- [x] `new_processed/village_gap.csv` — CSV, 172K, 792 rows — written by `06_village_gap.ipynb`, the pipeline's final output.
+- [x] `new_processed/village_gap.geojson` — GeoJSON, 804K, 792 features — written by `06_village_gap.ipynb`.
+- [x] `new_processed/village_gap.columns.md` — 8.0K — column-by-column documentation for `village_gap.csv`, written alongside it.
+
+## Not found on disk, no longer documented
+The previous version of this inventory listed `data/processed/` (an old pipeline's output —
+`communities.csv`, `sa1_boundaries.geojson`, etc.), `raw/2021_IP_all_for_NT_short-header/`,
+`raw/school_data.xlsx`, and references to scripts named `05_load_services.py`,
+`06_compute_distances.py`, `connecitivity_analysis.ipynb` and
+`population_distribution_analsis.ipynb`. None of these exist anywhere in the current repo —
+`data/processed/` is not present, and the current pipeline is the `notebooks/00a`–`06` series
+writing to `data/new_processed/` described above. They have been dropped from this inventory
+rather than carried forward as stale entries.
