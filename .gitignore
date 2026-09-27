@@ -1,0 +1,13 @@
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Local archives of the data folders (the data itself is tracked with git-lfs)
+data/*.zip
+
+# Editors / OS
+.DS_Store
+Thumbs.db
