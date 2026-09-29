@@ -134,12 +134,11 @@ G_i be greedy's covered set after i picks, so G_0 = empty set, G_k = final
 answer. Let c_{i+1} = f(G_{i+1}) - f(G_i), the marginal gain of greedy's
 (i+1)-th pick.
 
-Step 1 — By monotonicity, adding ALL of OPT on top of G_i can only help:
-    f(G_i union OPT) >= f(OPT)  is false in general, but what IS true is
-    f(OPT) <= f(G_i union OPT), and by submodularity applied k times (adding
-    OPT's k elements one at a time to G_i), the total extra gain from adding
-    all of OPT to G_i is at most k times the BEST single marginal gain any
-    one of OPT's elements would offer if added to G_i right now:
+Step 1 — Add OPT's k elements to G_i one at a time. By submodularity, each
+    element's gain in that sequence is at most the gain it would give if
+    added to G_i alone, so the total extra gain from adding all of OPT to
+    G_i is at most k times the BEST single marginal gain any one of OPT's
+    elements would offer if added to G_i right now:
         f(G_i union OPT) - f(G_i)  <=  k * max_{o in OPT} [f(G_i union {o}) - f(G_i)]
 
 Step 2 — Since f(G_i union OPT) >= f(OPT) (monotonicity: G_i union OPT is a
@@ -158,11 +157,9 @@ picks). Step 3 says d_i - d_{i+1} = c_{i+1} >= d_i / k, i.e.
 Applying this k times from d_0 = f(OPT) - f(empty set) = f(OPT):
         d_k  <=  f(OPT) * (1 - 1/k)^k
 
-Step 5 — (1 - 1/k)^k is a decreasing-to-a-limit sequence bounded above by
-1/e for every k >= 1 (a standard calculus fact: (1-1/k)^k -> 1/e as
-k -> infinity, and is below 1/e... actually approaches from below;
-the clean textbook statement uses (1 - 1/k)^k <= 1/e which holds for
-all positive integers k). So:
+Step 5 — (1 - 1/k)^k <= 1/e for every positive integer k. (Standard calculus
+fact: 1 - x <= e^(-x) for all x, so (1 - 1/k)^k <= (e^(-1/k))^k = 1/e. The
+sequence rises towards 1/e from below as k grows.) So:
         d_k <= f(OPT) / e
         f(G_k) = f(OPT) - d_k  >=  f(OPT) - f(OPT)/e  =  f(OPT) * (1 - 1/e)
 
