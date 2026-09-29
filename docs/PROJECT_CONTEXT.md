@@ -10,13 +10,54 @@ Read this before any new chat in the project. Update it when a decision changes.
 **CDU IT Code Fair — Data Innovation Challenge 2026.** Theme: Remote Connectivity.
 Link: https://itcodefair.cdu.edu.au/data-innovation-challenge/
 
-- **Submission deadline: 30 Sep 2026.** Challenge Day 7 Oct 2026. Registration closes 15 Sep. Awards 5 Nov.
-- Teams of 2–4 enrolled CDU IT coursework students.
-- Deliverables: data-analysis report (PDF, ≤8 pages body, ~2,500 words, A4, Calibri/Arial, team number in header, named `DataChallenge_Team xx_Report.pdf`), slide deck, interactive prototype, Python source with reproducing README.
-- Report structure: title page → 150–250 word summary → Introduction, Methodology, Findings, Discussion (ethical/cultural/community), Recommendations (govt/industry/community), References, Appendices (AI-use declaration, code, dataset links).
-- Presentation: 10-min pitch + 5-min Q&A (requirements page says 5-min deck; check which applies).
-- Tasks the brief names: find the gaps; make them understandable; integrate multiple sources; ethical/cultural/community impacts; solutions usable offline / low-connectivity.
-- Judging: datasets, creativity, technical sophistication, contextual relevance & practicality, ethics, presentation.
+- **Submission deadline: Wed 30 Sep 2026**, by email to `itcodefair@cdu.edu.au` (a ZIP of the
+  report + source code). **Registration closed 18 Sep 2026, 5pm** (was previously noted here
+  as 15 Sep — corrected 2026-09-29 against the official page). Challenge Day **Wed 7 Oct 2026,
+  09:00–17:00**, Festival Learning Space 1.12, Danala, ECP Darwin, CDU. Awards 5 Nov.
+- Teams of 2–4 enrolled CDU IT coursework students (undergrad, postgrad, TAFE, short courses).
+  **HDR students are not eligible.**
+- **Email subject line format:** `Data Innovation Challenge Submission – [Group] – IT Code
+  Fair 2026`. Name the group properly and include every required file in the ZIP.
+- **Four submission deliverables** (confirmed 2026-09-29, resolves the earlier "check which
+  applies" note below):
+  1. Data-analysis report — PDF only.
+  2. 5-minute presentation slide deck (a separate artefact from the 10+5 min live session below).
+  3. Interactive prototype solution (this repo's Streamlit app).
+  4. Python source (`.py` / notebooks, no package restrictions) with a README giving
+     reproducing instructions — this repo's root `README.md`.
+  - **Datasets themselves don't need to be submitted** — link to them in the report/appendix
+    instead (this repo already does this in `data/README.md`).
+- **Report format, exactly as specified:**
+  - File type PDF only; **max 8 pages** (excludes title page, references, appendices);
+    ~2,500 words as a *guideline*, not a hard limit.
+  - Page setup: A4, continuous page numbering; **header AND footer** must both carry Team
+    Number and Page Number (previously noted as header-only here — corrected).
+  - Fonts: Calibri or Arial. Title 20pt bold · section headings 14pt bold · body 11pt regular
+    · captions & references 10pt.
+  - File name: `DataChallenge_Team xx_Report.pdf` (xx = team number).
+  - Structure: title page (title, team number, members + roles, date, challenge name) →
+    150–250 word summary (problem/gap, approach, key findings, ethical/cultural/community
+    impacts, recommendations) → Introduction → Methodology → Findings → Discussion (ethical,
+    cultural, community impacts) → Recommendations (government / industry / community) →
+    References → Appendices (AI-use declaration, source code, dataset links).
+- **Presentation on Challenge Day: 10-minute pitch + 5-minute Q&A per team, face-to-face with
+  industry judges.** (The separate "5-minute slide deck" above is a submitted file, not the
+  live session's time limit — both are real, they're not in conflict.)
+- Tasks the brief names: find the gaps; make them understandable; integrate multiple sources;
+  ethical/cultural/community impacts; solutions usable offline / low-connectivity.
+- **Judging criteria:** datasets, overall creativity & originality, technical sophistication,
+  contextual relevance & practicality, ethical considerations, presentation. First winner and
+  runner-up only (no further placings). Judging panel: Sandeep Rasali and David Winslade
+  (Dept of Corporate & Digital Development NTG), Mohammad Aurangzeb Khan (Data Warehouse
+  Developer, NTG), Dr Cat Kutay (Senior Lecturer IT, CDU).
+- **Officially suggested datasets** (participants aren't limited to these; listed so it's
+  clear which of *our* sources map to which suggestion): NT Remote Areas Mobile Coverage →
+  our `raw/nt_mobile_coverage/` guide xlsx; National Broadband Network → our
+  `external/nbn/` footprints; ACMA Site Location Map → our `external/acma_rrl/` register.
+  **Not currently used by this project** (confirm before the deadline whether they're worth
+  adding, or note the gap in the report's Discussion/Recommendations): ADII Dashboard
+  (Australian Digital Inclusion Index), ACCC Mobile Infrastructure Report data release,
+  Tropical cyclone reports, First Nations Connectivity Mapping Tool, ABS TableBuilder.
 
 ---
 

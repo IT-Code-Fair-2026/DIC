@@ -44,7 +44,9 @@ DIC/
 │   ├── raw/             supplied by CDU for the challenge: read-only
 │   ├── external/        downloaded by us from public sources: read-only
 │   └── processed/       written by the notebooks, and ONLY by the notebooks
-└── docs/                data dictionary, dataset inventory, project context, EDA plots
+├── docs/                data dictionary, dataset inventory, project context, EDA plots
+├── report/              generates the submission PDF report straight from data/processed/
+└── hypothesis_proof_notebooks/   formal statistical tests of the report's 3 hypotheses
 ```
 
 ## Pipeline
@@ -102,3 +104,5 @@ After `python run_pipeline.py`, these numbers should match (printed in the noteb
 | `docs/PROJECT_CONTEXT.md` | goals, decisions and rules of the analysis |
 | `docs/SERVICES_LAYER.md` | how the school / medical / emergency layer was built |
 | `app/README.md` | what the dashboard shows |
+| `report/README.md` | how to (re)build the submission PDF report from `data/processed/` |
+| `hypothesis_proof_notebooks/README.md` | formal statistical tests of the report's 3 hypotheses, and how the greedy algorithm works |
