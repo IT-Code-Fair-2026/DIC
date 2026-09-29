@@ -4,6 +4,9 @@ __pycache__/
 .ipynb_checkpoints/
 .venv/
 venv/
+.claude/
+.streamlit/
+.vscode/
 
 # Local archives of the data folders (the data itself is tracked with git-lfs)
 data/*.zip

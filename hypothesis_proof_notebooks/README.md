@@ -9,9 +9,15 @@ Formal statistical tests of the three hypotheses framed in the project report
 
 | Notebook | Hypothesis | Method | Result |
 |---|---|---|---|
-| `H1_fragility_hypothesis.ipynb` | Most communities within reach of a tower have no independent second network as backup | Two one-sided exact binomial tests (village-level and tower-level) + chi-square test of independence vs. remoteness class | **Supported** — p < 1e-24 at both levels |
-| `H2_misallocation_hypothesis.ipynb` | The current MBSP investment backlog is not population-targeted | Monte Carlo permutation test (10,000 random draws) comparing MBSP-unbuilt reach and greedy-selected reach against the empirical random-selection distribution | **Supported** — MBSP-unbuilt underperforms the median random draw; greedy beats ~100% of random draws |
-| `H3_compounding_vulnerability_hypothesis.ipynb` | Mobile-coverage gaps and service (school/medical/emergency) gaps overlap, not occur independently | Mann-Whitney U per service type + Fisher's exact test on "zero services within 10 km" | **Strongly supported** — p < 1e-54 on every test |
+| `H1_fragility_hypothesis.ipynb` | Most communities within reach of a tower have no independent second network as backup | Two one-sided exact binomial tests (village-level and tower-level) + chi-square test of independence vs. remoteness class; SA1-cluster bootstrap robustness check; Census population view by SA1 | **Supported** — 75% of covered places lack a second network (p < 1e-24; bootstrap upper bound 0.32 < 0.5); 33,177 people live in SA1s where no place has one |
+| `H2_misallocation_hypothesis.ipynb` | The current MBSP investment backlog is not population-targeted | Two one-sided Monte Carlo tests (10,000 random draws, +1-corrected p): does MBSP-unbuilt beat random (Test A), does greedy (Test B); sensitivity without SA1s that contain a well-covered village | **Supported** — MBSP-unbuilt is indistinguishable from random (p = 0.57 at 40 km, 0.68 at 15 km: no evidence of targeting), greedy beats every random draw (p < 1e-4) |
+| `H3_compounding_vulnerability_hypothesis.ipynb` | Connectivity gaps and service (school/medical/emergency) gaps overlap, not occur independently | Mann-Whitney U (rank-biserial effect size) per service type + Fisher's exact test on "zero services within 10 km", for the mobile gap and for `no_connectivity`; SA1-cluster bootstrap | **Strongly supported** — p < 1e-35 on every test, r = 0.54–0.72, every bootstrap interval excludes 0 |
+
+**Data rules followed by all three.** Population is only ever the 2021 Census count per SA1, used
+once per SA1 and never split across the villages inside it; BushTel population is never used.
+BushTel places are reference points, so village-level counts are counts of *places*, not people.
+Villages in one SA1 are not independent, so H1 and H3 also resample whole SA1s to check that their
+conclusions do not rest on treating them as independent (H2's demand already works per SA1).
 
 `greedy_algorithm_explained.txt` documents the population-weighted greedy
 maximum-coverage algorithm used in `H2` (and in `app/app.py`'s Recommendations
