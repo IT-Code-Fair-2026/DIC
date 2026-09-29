@@ -10,13 +10,54 @@ Read this before any new chat in the project. Update it when a decision changes.
 **CDU IT Code Fair — Data Innovation Challenge 2026.** Theme: Remote Connectivity.
 Link: https://itcodefair.cdu.edu.au/data-innovation-challenge/
 
-- **Submission deadline: 30 Sep 2026.** Challenge Day 7 Oct 2026. Registration closes 15 Sep. Awards 5 Nov.
-- Teams of 2–4 enrolled CDU IT coursework students.
-- Deliverables: data-analysis report (PDF, ≤8 pages body, ~2,500 words, A4, Calibri/Arial, team number in header, named `DataChallenge_Team xx_Report.pdf`), slide deck, interactive prototype, Python source with reproducing README.
-- Report structure: title page → 150–250 word summary → Introduction, Methodology, Findings, Discussion (ethical/cultural/community), Recommendations (govt/industry/community), References, Appendices (AI-use declaration, code, dataset links).
-- Presentation: 10-min pitch + 5-min Q&A (requirements page says 5-min deck; check which applies).
-- Tasks the brief names: find the gaps; make them understandable; integrate multiple sources; ethical/cultural/community impacts; solutions usable offline / low-connectivity.
-- Judging: datasets, creativity, technical sophistication, contextual relevance & practicality, ethics, presentation.
+- **Submission deadline: Wed 30 Sep 2026**, by email to `itcodefair@cdu.edu.au` (a ZIP of the
+  report + source code). **Registration closed 18 Sep 2026, 5pm** (was previously noted here
+  as 15 Sep — corrected 2026-09-29 against the official page). Challenge Day **Wed 7 Oct 2026,
+  09:00–17:00**, Festival Learning Space 1.12, Danala, ECP Darwin, CDU. Awards 5 Nov.
+- Teams of 2–4 enrolled CDU IT coursework students (undergrad, postgrad, TAFE, short courses).
+  **HDR students are not eligible.**
+- **Email subject line format:** `Data Innovation Challenge Submission – [Group] – IT Code
+  Fair 2026`. Name the group properly and include every required file in the ZIP.
+- **Four submission deliverables** (confirmed 2026-09-29, resolves the earlier "check which
+  applies" note below):
+  1. Data-analysis report — PDF only.
+  2. 5-minute presentation slide deck (a separate artefact from the 10+5 min live session below).
+  3. Interactive prototype solution (this repo's Streamlit app).
+  4. Python source (`.py` / notebooks, no package restrictions) with a README giving
+     reproducing instructions — this repo's root `README.md`.
+  - **Datasets themselves don't need to be submitted** — link to them in the report/appendix
+    instead (this repo already does this in `data/README.md`).
+- **Report format, exactly as specified:**
+  - File type PDF only; **max 8 pages** (excludes title page, references, appendices);
+    ~2,500 words as a *guideline*, not a hard limit.
+  - Page setup: A4, continuous page numbering; **header AND footer** must both carry Team
+    Number and Page Number (previously noted as header-only here — corrected).
+  - Fonts: Calibri or Arial. Title 20pt bold · section headings 14pt bold · body 11pt regular
+    · captions & references 10pt.
+  - File name: `DataChallenge_Team xx_Report.pdf` (xx = team number).
+  - Structure: title page (title, team number, members + roles, date, challenge name) →
+    150–250 word summary (problem/gap, approach, key findings, ethical/cultural/community
+    impacts, recommendations) → Introduction → Methodology → Findings → Discussion (ethical,
+    cultural, community impacts) → Recommendations (government / industry / community) →
+    References → Appendices (AI-use declaration, source code, dataset links).
+- **Presentation on Challenge Day: 10-minute pitch + 5-minute Q&A per team, face-to-face with
+  industry judges.** (The separate "5-minute slide deck" above is a submitted file, not the
+  live session's time limit — both are real, they're not in conflict.)
+- Tasks the brief names: find the gaps; make them understandable; integrate multiple sources;
+  ethical/cultural/community impacts; solutions usable offline / low-connectivity.
+- **Judging criteria:** datasets, overall creativity & originality, technical sophistication,
+  contextual relevance & practicality, ethical considerations, presentation. First winner and
+  runner-up only (no further placings). Judging panel: Sandeep Rasali and David Winslade
+  (Dept of Corporate & Digital Development NTG), Mohammad Aurangzeb Khan (Data Warehouse
+  Developer, NTG), Dr Cat Kutay (Senior Lecturer IT, CDU).
+- **Officially suggested datasets** (participants aren't limited to these; listed so it's
+  clear which of *our* sources map to which suggestion): NT Remote Areas Mobile Coverage →
+  our `raw/nt_mobile_coverage/` guide xlsx; National Broadband Network → our
+  `external/nbn/` footprints; ACMA Site Location Map → our `external/acma_rrl/` register.
+  **Not currently used by this project** (confirm before the deadline whether they're worth
+  adding, or note the gap in the report's Discussion/Recommendations): ADII Dashboard
+  (Australian Digital Inclusion Index), ACCC Mobile Infrastructure Report data release,
+  Tropical cyclone reports, First Nations Connectivity Mapping Tool, ABS TableBuilder.
 
 ---
 
@@ -38,7 +79,9 @@ Link: https://itcodefair.cdu.edu.au/data-innovation-challenge/
 ```
 data/raw/            supplied by CDU, read-only
 data/external/       downloaded by us, read-only
-data/new_processed/  written by the notebooks (README still says data/processed/)
+data/processed/      written by the notebooks (was data/new_processed/ until 2026-09-27)
+notebooks/           00a … 11, run in order by run_pipeline.py
+app/                 Streamlit dashboard, reads data/processed/
 docs/                DATASET_INVENTORY.md, DATA_DICTIONARY.md/.pdf (to be built by Claude Code)
 connecitivity_analysis.ipynb            -> mobile_sites, community_connectivity_priority
 population_distribution_analsis.ipynb   -> villages_with_areas, sa1_report(.csv/.geojson)
@@ -78,7 +121,7 @@ CRS: ABS = EPSG:7844, NBN = EPSG:4283, JSON/KML = 4326; all ≈ equal at sub-met
 
 ---
 
-## 5. Processed outputs (`data/new_processed/`)
+## 5. Processed outputs (`data/processed/`)
 
 ### `villages_with_areas.csv` / `.geojson` — 792 rows × 21 cols ✅ fixed 2026-09-05
 `community_id, community_name, community_aliases, community_type, latitude, longitude, land_council, local_govt_council, ntg_region, ward, electorate, main_language, bushtel_url, population_bushtel_2024, population_bushtel_source, sa1_code, sa2_name, iloc_code, iloc_name, pop_census_2021, n_villages_in_sa1`
@@ -98,7 +141,7 @@ CRS: ABS = EPSG:7844, NBN = EPSG:4283, JSON/KML = 4326; all ≈ equal at sub-met
 - GeoJSON version = polygons joined to report; use this in kepler, not the bare `sa1_boundaries.geojson`.
 
 **Rebuild (v2, `notebooks/02_sa1_report.ipynb` → `sa1_report.csv`):**
-- **Decision (revised 2026-09-06):** **keep all 649 rows**, merge polygons with `validate="1:1"`. Add boolean **`census_pop_suppressed = Tot_P_P < 5`** (34 rows True). Still write those 34 rows to `data/new_processed/area_with_population_lessthan_5.csv` as a side list. Set `Median_tot_hhd_inc_weekly` and `Average_household_size` **`0 → NaN`** (ABS suppression, 34 / 33 rows).
+- **Decision (revised 2026-09-06):** **keep all 649 rows**, merge polygons with `validate="1:1"`. Add boolean **`census_pop_suppressed = Tot_P_P < 5`** (34 rows True). Still write those 34 rows to `data/processed/area_with_population_lessthan_5.csv` as a side list. Set `Median_tot_hhd_inc_weekly` and `Average_household_size` **`0 → NaN`** (ABS suppression, 34 / 33 rows).
 - Reason the drop was reversed: **30 inhabited BushTel outstations sit in 4 of the suppressed (`Tot_P_P == 0`) SA1s** — Tanami `70201105311` (8), Yuendumu-Anmatjere `70201105402` (11), Gulf `70205106609` (10), Sandover-Plenty `70201105205` (1). Dropping the SA1 would strand them with no population reference. Their SA1's `sa1_report` row has `pop_census_2021 = 0` and `census_pop_suppressed = True`.
 - **`villages.csv` does not carry a census population column** — population lives only on `sa1_report` (SA1 is the unit for population, §2). villages.csv carries `sa1_code` / `sa2_name` / `remoteness_name` / `is_remote` / `n_villages_in_sa1`; population is joined at SA1 level in nb 07.
 - `is_remote` (bool) = `remoteness_name` in {Remote, Very Remote} → `True`; Outer Regional → `False`. 779 of 792 villages are `True`.

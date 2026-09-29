@@ -1,5 +1,11 @@
 # data/external/services/ — essential-services point layers
 
+> **What the pipeline actually uses (2026-09-27):** `trimmed/` — three CSVs (school list,
+> GA/NHSD medical facilities, GA emergency facilities) already cut down to the columns
+> notebooks `07`–`09` need. The original raw extracts they came from are not in the repo.
+> `_raw/` is empty. The GeoJSON pulls described below were an earlier plan (`src/05_load_services.py`
+> was never built) and are kept for reference, in case the layer is ever rebuilt from source.
+
 Schools, health clinics, hospitals and police stations for the Northern Territory, used by
 `src/05_load_services.py` to answer "how far is the nearest school / clinic / hospital /
 police station from each community?".
