@@ -7,6 +7,10 @@ venv/
 .claude/
 .streamlit/
 .vscode/
+<<<<<<< HEAD
+=======
+~WRL1105.tmp
+>>>>>>> origin/fixing
 
 # Local archives of the data folders (the data itself is tracked with git-lfs)
 data/*.zip
