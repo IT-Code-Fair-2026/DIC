@@ -15,7 +15,7 @@ outputs** (`data/processed/`, written by the two notebooks).
 ## Inputs
 
 ### `raw/bushtel/Com_BushTel_Profile_CMC_2024.json`
-GeoJSON FeatureCollection, 792 features (points, WGS84). BushTel Community Profile 2024 —
+GeoJSON FeatureCollection, 792 features (points, WGS84). BushTel Community Profile 2024:
 master list of NT remote communities. Read by `population_distribution_analsis.ipynb`.
 
 | Column | Type | Description |
@@ -46,7 +46,7 @@ Census night (9 Aug 2021); small counts are randomly perturbed by the ABS for co
 
 **Key**: `SA1_CODE_2021` (11-digit ABS SA1 2021 code) in both tables.
 
-**`2021Census_G01_NT_SA1.csv`** — Selected Person Characteristics by Sex, 137 columns. Every
+**`2021Census_G01_NT_SA1.csv`**: Selected Person Characteristics by Sex, 137 columns. Every
 count repeats three times with a suffix: `_M` (male), `_F` (female), `_P` (persons/total).
 Column groups (suffix pattern applies to all):
 
@@ -63,7 +63,7 @@ Column groups (suffix pattern applies to all):
 | `High_yr_schl_comp_Yr_12_eq` … `..._D_n_g_sch` | Highest year of school completed (Yr12-eq down to Yr8-or-below, or did-not-go-to-school). |
 | `Count_psns_occ_priv_dwgs` / `Count_Persons_other_dwgs` | Persons in private dwellings vs other (non-private) dwellings. |
 
-**`2021Census_G02_NT_SA1.csv`** — Selected Medians and Averages, 9 columns:
+**`2021Census_G02_NT_SA1.csv`**: Selected Medians and Averages, 9 columns:
 
 | Column | Description |
 |---|---|
@@ -100,7 +100,7 @@ Communities with 3G/4G Mobile Coverage" guide. Read by `connecitivity_analysis.i
 ### `external/mbsp/MBSP - Round {1,2,3,4,5,5A,6,7} Funded Base Stations.kml`
 8 KMLs, one per Mobile Black Spot Program funding round; each `Placemark` is one funded
 site. Read by `connecitivity_analysis.ipynb` (filtered to `State == "NT"`, deduped by
-`MBSP_ID`). **The field schema changes across rounds** — not every column exists in every
+`MBSP_ID`). **The field schema changes across rounds**; not every column exists in every
 file:
 
 | Column | Present in | Description |
@@ -129,7 +129,7 @@ whichever is present) to get one `site_type` value per row across all 8 schemas.
 
 ### `external/abs_boundaries/ILOC_2021_AUST_GDA2020_SHP/`
 Shapefile, 1,139 polygon records nationally (189 in NT). ABS ASGS 2021 Indigenous Location
-boundaries — one file carries all three nested Indigenous geography levels. CRS: EPSG:7844
+boundaries: one file carries all three nested Indigenous geography levels. CRS: EPSG:7844
 (GDA2020). Read by `population_distribution_analsis.ipynb` to tag each village with its ILOC.
 
 | Column | Description |
@@ -163,7 +163,7 @@ XLSX, sheet `SA1_RA_2021_AUST`, 61,845 data rows. ABS Remoteness Area 2021 corre
 
 ### `external/abs_boundaries/SA1_2021_AUST_GDA2020_SHP/`
 Shapefile, 61,845 polygon records nationally (649 in NT). ABS ASGS 2021 (Edition 3) SA1
-boundaries — the population/equity reporting unit for this project. CRS: EPSG:7844
+boundaries: the population/equity reporting unit for this project. CRS: EPSG:7844
 (GDA2020). Read by `population_distribution_analsis.ipynb`.
 
 | Column | Description |
@@ -181,7 +181,7 @@ boundaries — the population/equity reporting unit for this project. CRS: EPSG:
 
 ---
 
-### `external/acma_rrl/` — `site.csv`, `licence.csv`, `device_details.csv`
+### `external/acma_rrl/`: `site.csv`, `licence.csv`, `device_details.csv`
 ACMA Register of Radiocommunications Licences, daily national full extract (3 of the 24
 CSVs in the folder are selected here). Read by `connecitivity_analysis.ipynb` to build the
 "carrier cellular site" layer: a site counts if its devices sit under a licence held by a
@@ -189,7 +189,7 @@ mobile carrier (`client.LICENCEE`, from the now-unticked `client.csv`) in a mobi
 (`licence.LICENCE_CATEGORY_NAME`). Column types below are from the ACMA DDL
 (`DOC/cr_tables_oracle.sql`); "used" marks columns the notebook actually loads.
 
-**`site.csv`** — 129,491 rows, one row per licensed site (3,771 in NT). All 10 columns read
+**`site.csv`**: 129,491 rows, one row per licensed site (3,771 in NT). All 10 columns read
 (`dtype=str`, no `usecols`):
 
 | Column | Type | Used | Description |
@@ -204,7 +204,7 @@ mobile carrier (`client.LICENCEE`, from the now-unticked `client.csv`) in a mobi
 | `ELEVATION` | NUMBER | ✓ | Site elevation. |
 | `HCIS_L2` | VARCHAR2(31) | ✓ | ACMA height/clearance information surface code. |
 
-**`licence.csv`** — 164,204 rows, one row per licence. Notebook reads only 3 of 16 columns
+**`licence.csv`**: 164,204 rows, one row per licence. Notebook reads only 3 of 16 columns
 (`usecols=["LICENCE_NO","CLIENT_NO","LICENCE_CATEGORY_NAME"]`):
 
 | Column | Type | Used | Description |
@@ -222,7 +222,7 @@ mobile carrier (`client.LICENCEE`, from the now-unticked `client.csv`) in a mobi
 | `BSL_NO` | VARCHAR2(31) | | Broadcasting service licence number, where applicable. |
 | `AWL_TYPE` | VARCHAR2(511) | | Amateur/wireless licence subtype, where applicable. |
 
-**`device_details.csv`** — 2,154,998 rows (never loaded in full — size/row count only;
+**`device_details.csv`**: 2,154,998 rows (never loaded in full: size/row count only;
 notebook uses `usecols=["LICENCE_NO","SITE_ID"]` purely to link a licence to its site(s)):
 
 | Column | Type | Used | Description |
@@ -273,15 +273,15 @@ notebook uses `usecols=["LICENCE_NO","SITE_ID"]` purely to link a licence to its
 
 ### `external/nbn/fixedline/nbn_coverage_fixedline.shp`
 Shapefile, 5,316 polygon records. NBN fixed-line technology footprint. CRS: EPSG:4283
-(GDA94) — reproject before use per `data/README.md`. Not currently read by either notebook.
+(GDA94). Reproject before use per `data/README.md`. Not currently read by either notebook.
 
 | Column | Type | Description |
 |---|---|---|
-| `polygon_id` | string (20) | Footprint polygon identifier; the only attribute column — no technology/speed tier field. |
+| `polygon_id` | string (20) | Footprint polygon identifier; the only attribute column: no technology/speed tier field. |
 
 ### `external/nbn/wireless/nbn_coverage_wireless.shp`
 Shapefile, 505,615 polygon records. NBN fixed-wireless technology footprint. CRS: EPSG:4283
-(GDA94) — reproject before use. Not currently read by either notebook.
+(GDA94). Reproject before use. Not currently read by either notebook.
 
 | Column | Type | Description |
 |---|---|---|
@@ -314,7 +314,7 @@ carrier towers + NT coverage guide + MBSP funded sites), written by
 ---
 
 ### `processed/community_connectivity_priority.csv`
-188 rows — one per NT coverage-guide site (`source == "guide"` rows from `mobile_sites`),
+188 rows: one per NT coverage-guide site (`source == "guide"` rows from `mobile_sites`),
 sorted by `likely_gap` then `population` descending. Written by `connecitivity_analysis.ipynb`.
 
 | Column | Description |
@@ -330,7 +330,7 @@ sorted by `likely_gap` then `population` descending. Written by `connecitivity_a
 | `nearest_mbsp_km` | Haversine distance, km, to the nearest MBSP-funded site. |
 | `nearest_mbsp_round` | MBSP funding round of that nearest site. |
 | `nearest_mbsp_built` | Whether that nearest MBSP site's status was `Complete`. |
-| `likely_gap` | Triage flag: `True` when the guide shows no macro/small coverage **and** the nearest real tower is >15 km away. The notebook's own comment flags this as "a starting-point triage flag, not a validated verdict" — the 15 km cutoff should be checked against whatever the guide treats as "in range" before use. |
+| `likely_gap` | Triage flag: `True` when the guide shows no macro/small coverage **and** the nearest real tower is >15 km away. The notebook's own comment flags this as "a starting-point triage flag, not a validated verdict"; the 15 km cutoff should be checked against whatever the guide treats as "in range" before use. |
 
 ---
 
@@ -346,7 +346,7 @@ Written by `population_distribution_analsis.ipynb`.
 ---
 
 ### `processed/villages_with_areas.csv` / `.geojson`
-793 rows/features, WGS84 points — the 792 BushTel communities (one duplicate id noted in
+793 rows/features, WGS84 points: the 792 BushTel communities (one duplicate id noted in
 the row count), each tagged with its containing SA1/ILOC area and that SA1's Census
 population. Written by `population_distribution_analsis.ipynb`.
 
@@ -358,7 +358,7 @@ population. Written by `population_distribution_analsis.ipynb`.
 | `sa1_code` | ABS SA1 2021 code the village point falls inside (spatial join against the SA1 shapefile). |
 | `sa2_name` | Name of the SA2 containing that SA1. |
 | `iloc_code` / `iloc_name` | ABS Indigenous Location code/name the village point falls inside (spatial join against the ILOC shapefile). |
-| `pop_census_2021` | 2021 Census total persons (`Tot_P_P` from census `G01`) for the **SA1** this village sits in — the same figure repeats for every village sharing that SA1; it is not a per-village population. |
+| `pop_census_2021` | 2021 Census total persons (`Tot_P_P` from census `G01`) for the **SA1** this village sits in; the same figure repeats for every village sharing that SA1; it is not a per-village population. |
 | `n_villages_in_sa1` | Count of BushTel villages that fall within the same SA1 as this one. |
 
 ---
@@ -366,10 +366,10 @@ population. Written by `population_distribution_analsis.ipynb`.
 ## Notes on scope
 
 - Only the datasets ticked in `docs/DATASET_INVENTORY.md` are covered. In particular, only
-  3 of the 24 `acma_rrl` CSVs (`site`, `licence`, `device_details`) are documented — `client.csv`
+  3 of the 24 `acma_rrl` CSVs (`site`, `licence`, `device_details`) are documented: `client.csv`
   was deliberately left unticked even though the notebook currently reads it too (to link a
   licence's `CLIENT_NO` to a carrier name via `LICENCEE`); flag if that link should be added
   back in.
 - The old pipeline's outputs and the un-selected `communities.*` /
-  `sa1_report.*` files are not documented here — see `docs/DATASET_INVENTORY.md` for why each
+  `sa1_report.*` files are not documented here: see `docs/DATASET_INVENTORY.md` for why each
   is marked unused/stale.
