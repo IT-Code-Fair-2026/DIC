@@ -7,6 +7,7 @@ venv/
 .claude/
 .streamlit/
 .vscode/
+~WRL1105.tmp
 
 # Local archives of the data folders (the data itself is tracked with git-lfs)
 data/*.zip
